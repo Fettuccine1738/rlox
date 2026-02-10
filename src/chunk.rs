@@ -1,9 +1,13 @@
 use std::fmt::Display;
 
+// each opcode determines how many operand bytes it has and what they mean.
+// For example, return may have no operands.
+// Each new opcode should specify what its operands look like.
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)] // lets us represent them as bytes as C does.
 pub enum OpCode {
     Return = 0, // return from the current function. 
+    Constant = 1,
 }
 
 impl Display for OpCode {
@@ -18,36 +22,106 @@ impl OpCode {
     fn from_byte(b: u8) -> Self {
         match b {
             0 => OpCode::Return,
+            1 => OpCode::Constant,
             _ => panic!("Invalid opcode {}", b),
         }
     }
 
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Line(u32);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Value(f64);
+
 #[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<u8>, // uint8(bits)_t
+    pub constants: Vec<Value>,
+    pub lines: Vec<Line>
 }
 
 impl Chunk {
     pub fn new() -> Self {
         Self {
-            code: Vec::new()
+            code: Vec::new(),
+            constants: Vec::new(),
+            lines: Vec::new()
         }
     }
 
-    pub fn write_chunk(&mut self, op_code: OpCode) {
+    pub fn write_chunk(&mut self, op_code: OpCode, line: u32) {
         self.code.push(op_code as u8);
+        self.lines.push(Line(line));
     }
 
     pub fn disassemble(&self, name: &str) {
         println!("====={name}=====");
+        let mut i = 0usize;
 
-        for c in &self.code {
-            // let as_byte: String = Self::get_bytes(*c);
-            let op_code: OpCode = OpCode::from_byte(*c);
-            println!("{op_code}");
+        while i < self.code.len() {
+            // let byte  = self.code[i];
+            // let op_code: OpCode = OpCode::from_byte(byte);
+
+            // let line_num = if i > 0 && self.lines[i] == self.lines[i - 1] {
+            //     "   |".to_string() } else { self.lines[i].0.to_string() };
+
+            // match op_code {
+            //     OpCode::Return => println!("{:04}\t{:04}\t{:?}\t{:?}", i, line_num, byte, op_code),
+            //     OpCode::Constant => {
+            //         let idx = self.code[i + 1];
+            //         let constant: Value = self.constants[idx as usize];
+            //         println!("{:04}\t{:04}\t{:08b}\t{:?}\t '{}'", i, line_num, byte, op_code, constant.0);
+            //         i += 2; // skip the  constant op_code and the index of the constant in the constant array. 
+            //         continue;
+            //     },
+            //     _ => panic!()
+            // }
+            // i += 1;
+            i = self.disassemble_instruction(i);
         }
+    }
+
+    fn disassemble_instruction(&self, offset: usize) -> usize {
+        print!("{:04} ", offset);
+        let line = self.lines[offset].0;
+
+        if offset > 0 && line == self.lines[offset - 1].0 {
+            print!("    | ");
+        } else {
+            print!("{:4} ", line);
+        }
+
+        let instruction = self.code[offset];
+        let op = OpCode::from_byte(instruction);
+
+        match op {
+            OpCode::Return => {
+                println!(" RETURN");
+                offset + 1
+            },
+            OpCode::Constant => {
+                let idx = self.code[offset + 1];
+                println!("  OP_CONSTANT\t{}\t{}", idx, self.constants[idx as usize].0);
+                offset + 2
+            }
+            // _ => panic!()
+        }
+    }
+
+    pub fn write_constant(&mut self, value: f64, line: u32) {
+        let idx = self.add_constant(value);
+        self.code.push(OpCode::Constant as u8);
+        self.code.push(idx as u8);
+        self.lines.push(Line(line)); // line num for constant bytecode 
+        self.lines.push(Line(line)); // line num for constant value
+    }
+
+    pub fn add_constant(&mut self, value: f64) -> usize {
+        self.constants.push(Value(value));
+        self.constants.len() - 1 // index of the last push
     }
 
     // pub fn get_bytes(bits: u8) -> String {
@@ -58,3 +132,21 @@ impl Chunk {
     //     string
     // }
 }
+
+
+// #[derive(Debug)]
+// pub struct ValueArray {
+//     values: Vec<Value>,
+// }
+
+// impl ValueArray {
+//     pub fn new() -> Self {
+//         Self {
+//             values: Vec::new(),
+//         }
+//     }
+
+//     pub fn write_array(&mut self, value: Value) {
+//         self.values.push(value);
+//     }
+// }
