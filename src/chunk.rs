@@ -8,6 +8,7 @@ use std::fmt::Display;
 pub enum OpCode {
     Return = 0, // return from the current function. 
     Constant = 1,
+    ConstantLong = 2,
 }
 
 impl Display for OpCode {
@@ -23,6 +24,7 @@ impl OpCode {
         match b {
             0 => OpCode::Return,
             1 => OpCode::Constant,
+            2 => OpCode::ConstantLong,
             _ => panic!("Invalid opcode {}", b),
         }
     }
@@ -97,6 +99,10 @@ impl Chunk {
         let instruction = self.code[offset];
         let op = OpCode::from_byte(instruction);
 
+        // OpConstant -> store bytecode, store index of the value <index is only between 0-255>
+        // only 256 possible combinations, problematic if we require more than that.
+        // for OpConstantLong -> store bytecode, but index could go up to 24 bits, i.e
+        // to get the (operand) index of the value, we may need to look at index1, index2, index3     
         match op {
             OpCode::Return => {
                 println!(" RETURN");
@@ -107,16 +113,42 @@ impl Chunk {
                 println!("  OP_CONSTANT\t{}\t{}", idx, self.constants[idx as usize].0);
                 offset + 2
             }
+            OpCode::ConstantLong => {
+                // 24 bit operand. 
+                let bytes = &self.code[offset+1..offset+1];
+                let idx = (bytes[0] as u32) 
+                                | (bytes[1] as u32) << 8 
+                                | (bytes[2] as u32)  << 16; // 24 bits
+                let constant = self.constants[idx as usize].0;
+                //  let total = 
+                println!("  OP_CONSTANT_LONG\t{}\t{constant}", idx);
+                offset + 4 // consume op_code_long, byte, byte, byte 
+            }
             // _ => panic!()
         }
     }
 
     pub fn write_constant(&mut self, value: f64, line: u32) {
         let idx = self.add_constant(value);
-        self.code.push(OpCode::Constant as u8);
-        self.code.push(idx as u8);
-        self.lines.push(Line(line)); // line num for constant bytecode 
-        self.lines.push(Line(line)); // line num for constant value
+        if idx < 256 { // the amount a single byte index can hold.
+            self.code.push(OpCode::Constant as u8);
+            self.code.push(idx as u8);
+            self.lines.push(Line(line)); // line num for constant bytecode 
+            self.lines.push(Line(line)); // line num for constant value
+        } else {
+            self.code.push(OpCode::ConstantLong as u8);
+            // resolve byte index.
+            let bits = idx.to_le();
+            self.code.push((bits & 0xFF) as u8);
+            self.code.push(((bits >> 8) & 0xFF) as u8);
+            self.code.push(((bits >> 16) & 0xFF) as u8);
+
+            self.lines.push(Line(line));
+            self.lines.push(Line(line));
+            self.lines.push(Line(line));
+            self.lines.push(Line(line));
+        }
+        assert_eq!(self.code.len(), self.lines.len())
     }
 
     pub fn add_constant(&mut self, value: f64) -> usize {
