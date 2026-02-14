@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Neg};
+use std::{fmt::Display, ops::{Add, Div, Neg, Mul, Sub}};
 
 // each opcode determines how many operand bytes it has and what they mean.
 // For example, return may have no operands.
@@ -10,6 +10,10 @@ pub enum OpCode {
     Constant = 1,
     ConstantLong = 2,
     Negate = 3,
+    Add = 4,
+    Divide = 5,
+    Multiply = 6,
+    Subtract = 7,
 }
 
 impl Display for OpCode {
@@ -17,17 +21,6 @@ impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // Use `self.number` to refer to each positional data point.
         write!(f, "{:08b} {:?}", *self as u8, self)
-    }
-}
-
-impl OpCode {
-    fn from_byte(b: u8) -> Self {
-        match b {
-            0 => OpCode::Return,
-            1 => OpCode::Constant,
-            2 => OpCode::ConstantLong,
-            _ => panic!("Invalid opcode {}", b),
-        }
     }
 }
 
@@ -40,6 +33,10 @@ impl TryFrom<u8> for OpCode {
             1 => Ok(OpCode::Constant),
             2 => Ok(OpCode::ConstantLong),
             3 => Ok(OpCode::Negate),
+            4 => Ok(OpCode::Add),
+            5 => Ok(OpCode::Divide),
+            6 => Ok(OpCode::Multiply),
+            7 => Ok(OpCode::Subtract),
             _ => Err(()),
         }
     }
@@ -63,6 +60,39 @@ impl Neg for Value {
         Self(-self.0)
     }
 }
+
+impl Add for Value {
+    type Output = Self;
+    fn add(self, other: Self) -> Self::Output {
+        Self(self.0 + other.0)
+    }
+}
+
+impl Div for Value {
+    type Output = Self;
+    fn div(self, other: Self) -> Self::Output {
+        Self(self.0 / other.0)
+    }
+}
+
+impl Mul for Value {
+    type Output = Self;
+    fn mul(self, other: Self) -> Self::Output {
+        Self(self.0 * other.0)
+    }
+}
+
+impl Sub for Value {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self::Output {
+        Self(self.0 - other.0)
+    }
+}
+
+// CHALLENGE: to generate a minimal instruction set eliminating 
+// either OP_NEGATE or OP_SUBSTRACT: 4 - 3 * -2
+// constant -> op_sub -> constant -> op_mul -> constant 0 -> op_sub -> 2 (removing negation)
+// constant -> constant(-ve) -> op_mul -> constant(-2).
 
 #[derive(Debug)]
 pub struct Chunk {
@@ -117,23 +147,39 @@ impl Chunk {
                 offset + 1
             }
             OpCode::Constant => {
-                let idx = self.code[offset + 1];
-                println!("  OP_CONSTANT\t{}\t{}", idx, self.constants[idx as usize].0);
+                let index = self.read_constant(offset);
+                println!("  OP_CONSTANT\t{}\t{}", index, self.constants[index].0);
                 offset + 2
             }
             OpCode::ConstantLong => {
                 // 24 bit operand.
-                let bytes = &self.code[offset + 1..offset + 4];
-                let idx = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16; // 24 bits
-                let constant = self.constants[idx as usize].0;
-                println!("  OP_CONSTANT_LONG\t{}\t{constant}", idx);
+                let index = self.read_long_contant(offset);
+                let constant = self.constants[index].0;
+                println!("  OP_CONSTANT_LONG\t{}\t{constant}", index);
                 offset + 4 // consume op_code_long, byte, byte, byte 
-            }, // _ => panic!()
-            OpCode::Negate => {
-                let constant = -self.constants[offset];
-                todo!()
-            }
+            } // _ => panic!()
+            OpCode::Negate | OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
+                // It is impossible to know what value is being negated at disassembly time.
+                // e.g OP_CONSTANT 1, OP_CONSTANT_LONG 2, OP_ADD, OP_NEGATE
+                // how do we know what expression the sign is being applied onto.
+                println!("  OP_{:?}", op);
+                offset + 1
+            },
+            _ => todo!()
         }
+    }
+
+    // reads the corresponding value of the OP_CONSTANT_LONG operand 24 bits and
+    // returns its a usize to index into the constants array
+    fn read_long_contant(&self, offset: usize) -> usize {
+        let bytes = &self.code[offset + 1..offset + 4];
+        let idx = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16; // 24 bits
+        return idx as usize;
+    }
+
+    fn read_constant(&self, offset: usize) -> usize {
+        let idx = self.code[offset + 1];
+        idx as usize
     }
 
     // constants have an additional operand the index in the constants buffer;

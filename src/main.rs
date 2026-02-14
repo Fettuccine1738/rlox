@@ -8,8 +8,13 @@ fn main() {
     // let idx = ch.add_constant(1.2);
     // ch.write_chunk(OpCode::Return, 1);
     ch.write_constant(42.01, 2);
+    ch.write_constant(2.0, 2);
+    ch.write_chunk(OpCode::Add, 2);
+    ch.write_constant(5.6, 2);
+    ch.write_chunk(OpCode::Divide, 2);
     ch.write_chunk(OpCode::Negate, 2);
     ch.write_chunk(OpCode::Return, 2);
+
     // dbg!(&ch);
     ch.disassemble("test bytes");
     // virtual_machine.

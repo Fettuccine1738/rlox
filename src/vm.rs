@@ -1,3 +1,9 @@
+use core::error;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Sub;
+
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
@@ -30,7 +36,7 @@ impl VM {
         Self {
             chunk: chunk_,
             ip: 0usize,
-            stack: Vec::with_capacity(STACK_MAX)
+            stack: Vec::with_capacity(STACK_MAX),
         }
     }
 
@@ -71,19 +77,26 @@ impl VM {
                     println!("{:?}", constant);
                     return InterpretResult::Undefined;
                     // break;
-                },
+                }
                 OpCode::ConstantLong => {
                     let constant: Value = self.read_constant(true);
                     self.stack.push(constant);
                     println!("{:?}", constant);
                     return InterpretResult::Undefined;
                     // break;
-                },
+                }
                 OpCode::Negate => {
                     if let Some(constant) = self.stack.pop() {
                         self.stack.push(-constant);
                     }
                 }
+                OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
+                    let rhs = self.stack.pop().unwrap();
+                    let lhs = self.stack.pop().unwrap();
+                    let result = Self::binary_op(lhs, rhs, instruction);
+                    self.stack.push(result);
+                    return InterpretResult::Undefined;
+                },
                 _ => todo!(),
             }
         }
@@ -91,6 +104,7 @@ impl VM {
 
     fn read_constant(&mut self, is_long: bool) -> Value {
         if is_long {
+            // let index = self.chunk.read_
             let bytes = &self.chunk.code[self.ip..self.ip + 3];
             let index = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16;
             let value = self.chunk.constants[index as usize];
@@ -98,14 +112,24 @@ impl VM {
             return value;
         } else {
             let index = self.read_byte() as usize;
-            // self.ip += 1; 
+            // self.ip += 1;
             *self.chunk.constants.get(index).unwrap()
         }
     }
 
     fn read_byte(&mut self) -> u8 {
-        let byte_code = *self.chunk.code.get(self.ip).unwrap();
+        let byte_code: u8 = *self.chunk.code.get(self.ip).unwrap();
         self.ip += 1; // point to next byte_code.
         byte_code
+    }
+
+    fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Value {
+        match opcode {
+            OpCode::Add      => lhs.add(rhs),
+            OpCode::Divide   => lhs.div(rhs),
+            OpCode::Multiply => lhs.mul(rhs),
+            OpCode::Subtract => lhs.sub(rhs),
+            _ => panic!()
+        }
     }
 }
