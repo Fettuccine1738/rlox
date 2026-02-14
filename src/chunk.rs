@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Neg};
 
 // each opcode determines how many operand bytes it has and what they mean.
 // For example, return may have no operands.
@@ -6,9 +6,10 @@ use std::fmt::Display;
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)] // lets us represent them as bytes as C does.
 pub enum OpCode {
-    Return = 0, // return from the current function. 
+    Return = 0, // return from the current function.
     Constant = 1,
     ConstantLong = 2,
+    Negate = 3,
 }
 
 impl Display for OpCode {
@@ -28,21 +29,46 @@ impl OpCode {
             _ => panic!("Invalid opcode {}", b),
         }
     }
-
 }
 
+impl TryFrom<u8> for OpCode {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(OpCode::Return),
+            1 => Ok(OpCode::Constant),
+            2 => Ok(OpCode::ConstantLong),
+            3 => Ok(OpCode::Negate),
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Line(u32);
+pub struct Line(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Value(f64);
+pub struct Value(pub f64);
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Neg for Value {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
+    }
+}
 
 #[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<u8>, // uint8(bits)_t
     pub constants: Vec<Value>,
-    pub lines: Vec<Line>
+    pub lines: Vec<Line>,
 }
 
 impl Chunk {
@@ -50,7 +76,7 @@ impl Chunk {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
-            lines: Vec::new()
+            lines: Vec::new(),
         }
     }
 
@@ -64,29 +90,11 @@ impl Chunk {
         let mut i = 0usize;
 
         while i < self.code.len() {
-            // let byte  = self.code[i];
-            // let op_code: OpCode = OpCode::from_byte(byte);
-
-            // let line_num = if i > 0 && self.lines[i] == self.lines[i - 1] {
-            //     "   |".to_string() } else { self.lines[i].0.to_string() };
-
-            // match op_code {
-            //     OpCode::Return => println!("{:04}\t{:04}\t{:?}\t{:?}", i, line_num, byte, op_code),
-            //     OpCode::Constant => {
-            //         let idx = self.code[i + 1];
-            //         let constant: Value = self.constants[idx as usize];
-            //         println!("{:04}\t{:04}\t{:08b}\t{:?}\t '{}'", i, line_num, byte, op_code, constant.0);
-            //         i += 2; // skip the  constant op_code and the index of the constant in the constant array. 
-            //         continue;
-            //     },
-            //     _ => panic!()
-            // }
-            // i += 1;
             i = self.disassemble_instruction(i);
         }
     }
 
-    fn disassemble_instruction(&self, offset: usize) -> usize {
+    pub fn disassemble_instruction(&self, offset: usize) -> usize {
         print!("{:04} ", offset);
         let line = self.lines[offset].0;
 
@@ -97,40 +105,43 @@ impl Chunk {
         }
 
         let instruction = self.code[offset];
-        let op = OpCode::from_byte(instruction);
+        let op = OpCode::try_from(instruction).expect("");
 
         // OpConstant -> store bytecode, store index of the value <index is only between 0-255>
         // only 256 possible combinations, problematic if we require more than that.
         // for OpConstantLong -> store bytecode, but index could go up to 24 bits, i.e
-        // to get the (operand) index of the value, we may need to look at index1, index2, index3     
+        // to get the (operand) index of the value, we may need to look at index1, index2, index3
         match op {
             OpCode::Return => {
                 println!(" RETURN");
                 offset + 1
-            },
+            }
             OpCode::Constant => {
                 let idx = self.code[offset + 1];
                 println!("  OP_CONSTANT\t{}\t{}", idx, self.constants[idx as usize].0);
                 offset + 2
             }
             OpCode::ConstantLong => {
-                // 24 bit operand. 
-                let bytes = &self.code[offset+1..offset+1];
-                let idx = (bytes[0] as u32) 
-                                | (bytes[1] as u32) << 8 
-                                | (bytes[2] as u32)  << 16; // 24 bits
+                // 24 bit operand.
+                let bytes = &self.code[offset + 1..offset + 4];
+                let idx = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16; // 24 bits
                 let constant = self.constants[idx as usize].0;
-                //  let total = 
                 println!("  OP_CONSTANT_LONG\t{}\t{constant}", idx);
                 offset + 4 // consume op_code_long, byte, byte, byte 
+            }, // _ => panic!()
+            OpCode::Negate => {
+                let constant = -self.constants[offset];
+                todo!()
             }
-            // _ => panic!()
         }
     }
 
+    // constants have an additional operand the index in the constants buffer;
+    // 1 or 3 byte is used up depending on the byte_code.
     pub fn write_constant(&mut self, value: f64, line: u32) {
         let idx = self.add_constant(value);
-        if idx < 256 { // the amount a single byte index can hold.
+        // if the index of stored constant is > 256, we use the OP_CONSTANT_LONG
+        if idx < 256 {
             self.code.push(OpCode::Constant as u8);
             self.code.push(idx as u8);
             self.lines.push(Line(line)); // line num for constant bytecode 
@@ -142,12 +153,13 @@ impl Chunk {
             self.code.push((bits & 0xFF) as u8);
             self.code.push(((bits >> 8) & 0xFF) as u8);
             self.code.push(((bits >> 16) & 0xFF) as u8);
-
+            // line num for constant bytecode and 3 line nums for the index.
             self.lines.push(Line(line));
             self.lines.push(Line(line));
             self.lines.push(Line(line));
             self.lines.push(Line(line));
         }
+        // !NOTE: remove this assertion when run-length encoding is implemented.
         assert_eq!(self.code.len(), self.lines.len())
     }
 
@@ -164,21 +176,3 @@ impl Chunk {
     //     string
     // }
 }
-
-
-// #[derive(Debug)]
-// pub struct ValueArray {
-//     values: Vec<Value>,
-// }
-
-// impl ValueArray {
-//     pub fn new() -> Self {
-//         Self {
-//             values: Vec::new(),
-//         }
-//     }
-
-//     pub fn write_array(&mut self, value: Value) {
-//         self.values.push(value);
-//     }
-// }

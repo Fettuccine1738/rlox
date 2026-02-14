@@ -1,7 +1,7 @@
-pub mod common;
 pub mod chunk;
+pub mod common;
+pub mod lox_errors;
+pub mod vm;
 
 #[cfg(test)]
-pub mod test {
-
-}
+pub mod test {}
