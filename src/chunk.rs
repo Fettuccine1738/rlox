@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::{Add, Div, Neg, Mul, Sub}};
+use std::{
+    fmt::Display,
+    ops::{Add, Div, Mul, Neg, Sub},
+};
 
 // each opcode determines how many operand bytes it has and what they mean.
 // For example, return may have no operands.
@@ -89,7 +92,7 @@ impl Sub for Value {
     }
 }
 
-// CHALLENGE: to generate a minimal instruction set eliminating 
+// CHALLENGE: to generate a minimal instruction set eliminating
 // either OP_NEGATE or OP_SUBSTRACT: 4 - 3 * -2
 // constant -> op_sub -> constant -> op_mul -> constant 0 -> op_sub -> 2 (removing negation)
 // constant -> constant(-ve) -> op_mul -> constant(-2).
@@ -164,8 +167,8 @@ impl Chunk {
                 // how do we know what expression the sign is being applied onto.
                 println!("  OP_{:?}", op);
                 offset + 1
-            },
-            _ => todo!()
+            }
+            _ => todo!(),
         }
     }
 
@@ -214,11 +217,4 @@ impl Chunk {
         self.constants.len() - 1 // index of the last push
     }
 
-    // pub fn get_bytes(bits: u8) -> String {
-    //     let mut string: String = String::new();
-    //     for b in bits.to_be_bytes() {
-    //         string.push(b as char);
-    //     }
-    //     string
-    // }
 }

@@ -44,9 +44,9 @@ impl VM {
         self.stack.clear();
     }
 
-    pub fn interpret(&mut self, chunk: Chunk) -> InterpretResult {
-        self.chunk = chunk;
-        return self.run();
+    pub fn interpret(&mut self, source: String) -> InterpretResult {
+        crate::compiler::compile(source);
+        InterpretResult::Ok
     }
 
     pub fn push_value(&mut self, value: Value) {
@@ -96,7 +96,7 @@ impl VM {
                     let result = Self::binary_op(lhs, rhs, instruction);
                     self.stack.push(result);
                     return InterpretResult::Undefined;
-                },
+                }
                 _ => todo!(),
             }
         }
@@ -125,11 +125,11 @@ impl VM {
 
     fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Value {
         match opcode {
-            OpCode::Add      => lhs.add(rhs),
-            OpCode::Divide   => lhs.div(rhs),
+            OpCode::Add => lhs.add(rhs),
+            OpCode::Divide => lhs.div(rhs),
             OpCode::Multiply => lhs.mul(rhs),
             OpCode::Subtract => lhs.sub(rhs),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 }
