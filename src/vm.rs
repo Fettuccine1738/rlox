@@ -22,7 +22,7 @@ pub enum InterpretResult {
 }
 
 pub struct VM {
-    chunk: Chunk,
+    // chunk: Option<Chunk>,
     ip: usize, // instruction pointer: book uses uint8_t*
     stack: Vec<Value>,
 }
@@ -32,9 +32,9 @@ impl VM {
         self.reset_stack();
     }
 
-    pub fn new(chunk_: Chunk) -> Self {
+    pub fn new() -> Self {
         Self {
-            chunk: chunk_,
+            // chunk: None, // we don't always start out with valid chunks
             ip: 0usize,
             stack: Vec::with_capacity(STACK_MAX),
         }
@@ -45,8 +45,15 @@ impl VM {
     }
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
-        crate::compiler::compile(source);
-        InterpretResult::Ok
+        let mut chunk: Chunk = Chunk::new();
+        if !crate::compiler::compile(source, &mut chunk) {
+            drop(chunk);
+            return InterpretResult::CompileError;
+        }
+
+        // self.ip  = chunk.code;
+        // self.chunk = Some(chunk);
+        self.run(&chunk)
     }
 
     pub fn push_value(&mut self, value: Value) {
@@ -57,13 +64,14 @@ impl VM {
         self.stack.pop()
     }
 
-    fn run(&mut self) -> InterpretResult {
+    fn run(&mut self, chunk: &Chunk) -> InterpretResult {
         loop {
             if DEBUG_TRACE {
                 println!("{:?}", self.stack);
-                self.chunk.disassemble_instruction(self.ip);
+                chunk.disassemble_instruction(self.ip);
             }
-            let instruction: OpCode = OpCode::try_from(self.read_byte()).expect("");
+
+            let instruction: OpCode = OpCode::try_from(self.read_byte(chunk)).expect("");
             match instruction {
                 OpCode::Return => {
                     if let Some(v) = self.stack.pop() {
@@ -72,14 +80,14 @@ impl VM {
                     return InterpretResult::Ok;
                 }
                 OpCode::Constant => {
-                    let constant: Value = self.read_constant(false);
+                    let constant: Value = self.read_constant(chunk, false);
                     self.stack.push(constant); // self.push_value(constant)
                     println!("{:?}", constant);
                     return InterpretResult::Undefined;
                     // break;
                 }
                 OpCode::ConstantLong => {
-                    let constant: Value = self.read_constant(true);
+                    let constant: Value = self.read_constant(chunk, true);
                     self.stack.push(constant);
                     println!("{:?}", constant);
                     return InterpretResult::Undefined;
@@ -102,23 +110,29 @@ impl VM {
         }
     }
 
-    fn read_constant(&mut self, is_long: bool) -> Value {
-        if is_long {
+    // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
+    fn read_constant(&mut self, chunk: &Chunk, is_long: bool) -> Value {
+        let index = if is_long {
             // let index = self.chunk.read_
-            let bytes = &self.chunk.code[self.ip..self.ip + 3];
-            let index = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16;
-            let value = self.chunk.constants[index as usize];
-            self.ip += 3; // point to next byte code to consume.
-            return value;
+            // let bytes = &chunk.code[self.ip..self.ip + 3];
+            // let index = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16;
+            let b1 = self.read_byte(chunk) as u32;
+            let b2 = self.read_byte(chunk) as u32;
+            let b3 = self.read_byte(chunk) as u32;
+
+            b1 | (b2 << 8) | (b3 << 16)
         } else {
-            let index = self.read_byte() as usize;
-            // self.ip += 1;
-            *self.chunk.constants.get(index).unwrap()
-        }
+            self.read_byte(chunk) as u32
+        };
+
+        *chunk
+            .constants
+            .get(index as usize)
+            .expect("Invalid constant index.")
     }
 
-    fn read_byte(&mut self) -> u8 {
-        let byte_code: u8 = *self.chunk.code.get(self.ip).unwrap();
+    fn read_byte(&mut self, chunk: &Chunk) -> u8 {
+        let byte_code: u8 = *chunk.code.get(self.ip).unwrap();
         self.ip += 1; // point to next byte_code.
         byte_code
     }

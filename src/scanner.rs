@@ -1,39 +1,72 @@
 #[derive(Debug)]
-pub struct Scanner<'a> {
-    source: &'a str,
+pub struct Scanner<'src> {
+    source: &'src str,
     start: usize,
     current: usize,
     line: u32,
 }
 
-pub struct Token<'a> {
+#[derive(Debug, Clone, Copy)]
+pub struct Token<'src> {
     pub kind: Kind,
-    pub lexeme: &'a str,
+    pub lexeme: &'src str,
     // start: usize, // ptr to the first character of our lexeme
     // length: usize, // number of character it should contain.
-    pub line: u32
+    pub line: u32,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, PartialEq, Clone)]
 #[repr(u8)]
 pub enum Kind {
-    // single char tokens 
-    LeftParen, RightParen, LeftBrace, RightBrace,
-    Comma, Dot, Minus, Plus, SemiColon, Slash, Star,
+    // single char tokens
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    Comma,
+    Dot,
+    Minus,
+    Plus,
+    SemiColon,
+    Slash,
+    Star,
     // 1 or 2 character tokens
-    Bang, BangEquals, Equal, EqualEquals, Greater, GreaterEqual,
-    Less, LessEqual,
+    Bang,
+    BangEquals,
+    Equal,
+    EqualEquals,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     // Literals
-    Identifier, String, Number,
+    Identifier,
+    String,
+    Number,
     // Keywords
-    And, Class, Else, False, For, Fun, If, Nil, Or, Print, Return, Super, 
-    This, True, Var, While,
+    And,
+    Class,
+    Else,
+    False,
+    For,
+    Fun,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
 
-    Error, EOF
+    Error,
+    EOF,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(source_: &'a str) -> Self {
+impl<'src> Scanner<'src> {
+    pub fn new(source_: &'src str) -> Self {
         Self {
             source: source_,
             start: 0,
@@ -42,14 +75,22 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Option<Token<'src>> {
+        self.skip_whitespace();
         self.start = self.current;
 
         if self.is_at_end() {
             self.make_token(Kind::EOF);
-        } 
+        }
+        let ch: char = self.advance();
+        if ch.is_digit(10) {
+            return Some(self.number());
+        }
+        if ch.is_alphabetic() || ch == '_' {
+            return Some(self.identifier());
+        }
 
-        match self.advance() {
+        Some(match ch {
             '(' => self.make_token(Kind::LeftParen),
             ')' => self.make_token(Kind::RightParen),
             '{' => self.make_token(Kind::LeftBrace),
@@ -61,18 +102,118 @@ impl<'a> Scanner<'a> {
             '+' => self.make_token(Kind::Plus),
             '*' => self.make_token(Kind::Star),
             '/' => self.make_token(Kind::Slash),
-            '!' => if self.match_char('=') { self.make_token(Kind::BangEquals) } 
-                    else { self.make_token(Kind::Equal) },
-            '=' => if self.match_char('=') { self.make_token(Kind::EqualEquals) } 
-                    else { self.make_token(Kind::Equal) },
-            '<' => if self.match_char('=') { self.make_token(Kind::LessEqual) } 
-                    else { self.make_token(Kind::Less) },
-            '>' => if self.match_char('=') { self.make_token(Kind::GreaterEqual) } 
-                    else { self.make_token(Kind::Greater) },
+            '!' => {
+                if self.match_char('=') {
+                    self.make_token(Kind::BangEquals)
+                } else {
+                    self.make_token(Kind::Equal)
+                }
+            }
+            '=' => {
+                if self.match_char('=') {
+                    self.make_token(Kind::EqualEquals)
+                } else {
+                    self.make_token(Kind::Equal)
+                }
+            }
+            '<' => {
+                if self.match_char('=') {
+                    self.make_token(Kind::LessEqual)
+                } else {
+                    self.make_token(Kind::Less)
+                }
+            }
+            '>' => {
+                if self.match_char('=') {
+                    self.make_token(Kind::GreaterEqual)
+                } else {
+                    self.make_token(Kind::Greater)
+                }
+            }
             '"' => self.string(),
-            _=> todo!()
-        }; 
-        self.error_token("Unexpected character.")
+            // _ => todo!(),
+            _ => self.error_token("Unexpected character.")
+        })
+    }
+
+    fn identifier(&mut self) -> Token<'src> {
+        while Self::is_alpha(self.peek().unwrap()) || self.peek().unwrap().is_digit(10) {
+            self.advance();
+        }
+        let kind = self.identifier_type();
+        self.make_token(kind)
+    }
+
+    // associated function: analogous to Java's static methods.
+    fn is_alpha(ch: char) -> bool {
+        ch == '_' || ch.is_alphabetic()
+    }
+
+    fn identifier_type(&mut self) -> Kind {
+        // let ch: char = self.source.as_bytes()[self.current] as char;
+        // match ch {
+        //     'src' => self.check_keyword(1, 2, "nd", Kind::And),
+        //     'c' => self.check_keyword(1, 4, "lass", Kind::Class),
+        //     'e' => self.check_keyword(1, 3, "lse", Kind::Else),
+        //     'i' => self.check_keyword(1, 1, "f", Kind::If),
+        //     'n' => self.check_keyword(1, 2, "il", Kind::Nil),
+        //     'o' => self.check_keyword(1, 1, "r", Kind::Or),
+        //     'p' => self.check_keyword(1, 4, "rint", Kind::Print),
+        //     'r' => self.check_keyword(1, 5, "eturn", Kind::Return),
+        //     's' => self.check_keyword(1, 4, "uper", Kind::Super),
+        //     'v' => self.check_keyword(1, 2, "ar", Kind::Var),
+        //     'w' => self.check_keyword(1, 4, "hile", Kind::While),
+        //     _ => todo!()
+        // }
+        // Kind::Identifier
+        let text = &self.source[self.start..self.current];
+        match text {
+            "and" => Kind::And,
+            "class" => Kind::Class,
+            "else" => Kind::Else,
+            "if" => Kind::If,
+            "nil" => Kind::Nil,
+            "Or" => Kind::Or,
+            "print" => Kind::Print,
+            "return" => Kind::Return,
+            "super" => Kind::Super,
+            "var" => Kind::Var,
+            "while" => Kind::While,
+            _ => Kind::Identifier,
+        }
+    }
+
+    fn check_keyword(
+        &mut self,
+        start: usize,
+        length: usize,
+        rest: &'static str,
+        kind: Kind,
+    ) -> Kind {
+        if self.current - self.start == start + length
+            && &self.source[self.start + start..self.start + start + length] == rest
+        {
+            return kind;
+        }
+        Kind::Identifier
+    }
+
+    fn number(&mut self) -> Token<'src> {
+        while self.peek().unwrap().is_digit(10) {
+            self.advance();
+        }
+
+        if let Some('.') = self.peek() {
+            let nxt = self.source.as_bytes()[self.current + 1] as char;
+            if nxt.is_digit(10) {
+                self.advance(); // consume '.'
+                while self.peek().unwrap().is_digit(10) {
+                    self.advance();
+                }
+            }
+        }
+
+        self.make_token(Kind::Number)
     }
 
     fn match_char(&mut self, expect: char) -> bool {
@@ -84,7 +225,7 @@ impl<'a> Scanner<'a> {
             self.current += 1;
             true
         }
-    } 
+    }
 
     fn skip_whitespace(&mut self) {
         // while let Some(' ' | '\r' | '\t') = self.peek() {
@@ -94,15 +235,15 @@ impl<'a> Scanner<'a> {
             let ch: Option<char> = self.peek();
             match ch {
                 Some(' ' | '\r' | '\t') => {
-                    let _ = self.advance(); 
-                },
+                    let _ = self.advance();
+                }
                 Some('\n') => {
                     let _ = self.advance();
                     self.line += 1;
                 }
                 Some('/') => {
-                    if let Some('/') = self.source[self.current+1..].chars().next() {
-                        while self.peek().unwrap() != '\n'  && !self.is_at_end()  {
+                    if let Some('/') = self.source[self.current + 1..].chars().next() {
+                        while self.peek().unwrap() != '\n' && !self.is_at_end() {
                             let _ = self.advance();
                         }
                     } else {
@@ -114,8 +255,8 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn string(&mut self) -> Token {
-        while self.peek().unwrap() != '"'  && !self.is_at_end()  {
+    fn string(&mut self) -> Token<'src> {
+        while self.peek().unwrap() != '"' && !self.is_at_end() {
             if self.peek().unwrap() == '\n' {
                 self.line += 1;
             }
@@ -133,11 +274,11 @@ impl<'a> Scanner<'a> {
         self.source[self.current..].chars().next()
     }
 
-    // NOTE: On why using the Iterator to get the next char is efficient 
+    // NOTE: On why using the Iterator to get the next char is efficient
     // Rust does not allocate: Tiny Struct Chars { ptr ,end } (2 pointers on the stack)
-    // Cost per call: no heap allcoation, no copying, just a few instructions, 
+    // Cost per call: no heap allcoation, no copying, just a few instructions,
     fn advance(&mut self) -> char {
-        // Cleaner and faster is using byte scanning, Lox only uses ascii 
+        // Cleaner and faster is using byte scanning, Lox only uses ascii
         // let current = self.source[self.current..].chars().next();
         let b = self.source.as_bytes()[self.current];
         self.current += 1;
@@ -148,11 +289,11 @@ impl<'a> Scanner<'a> {
         self.current >= self.source.len()
     }
 
-    fn make_token(&self, kind: Kind) -> Token<'a> {
+    fn make_token(&self, kind: Kind) -> Token<'src> {
         Token {
             kind: kind,
             lexeme: &self.source[self.start..self.current],
-            line: self.line
+            line: self.line,
         }
     }
 
@@ -160,12 +301,12 @@ impl<'a> Scanner<'a> {
     // msg cannot be 'dropped' before Token.
     // ? Good memory model a combination of C code ::
     // ? char* start and int length is a perfect candidate for a
-    // ? &str  
-    fn error_token(&self, msg: &'a str) -> Token<'a> {
+    // ? &str
+    fn error_token(&self, msg: &'static str) -> Token<'src> {
         Token {
             kind: Kind::Error,
             lexeme: msg,
-            line: self.line
+            line: self.line,
         }
     }
 }

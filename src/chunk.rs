@@ -216,5 +216,4 @@ impl Chunk {
         self.constants.push(Value(value));
         self.constants.len() - 1 // index of the last push
     }
-
 }
