@@ -113,6 +113,13 @@ impl Chunk {
         }
     }
 
+    // write allows user to write both opcodes and their operands
+    // write chunk only takes in opcodes and would fail if operands are passed to it.
+    pub fn write(&mut self, byte: u8, line: u32) {
+        self.code.push(byte);
+        self.lines.push(Line(line));
+    }
+
     pub fn write_chunk(&mut self, op_code: OpCode, line: u32) {
         self.code.push(op_code as u8);
         self.lines.push(Line(line));

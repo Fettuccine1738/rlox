@@ -14,11 +14,22 @@ pub struct Parser<'src> {
     scanner: Scanner<'src>,
     current: Token<'src>,
     previous: Token<'src>,
-    had_error: bool,
-    panic_mode: bool,
+    pub had_error: bool,
+    pub panic_mode: bool,
 }
 
 impl<'src> Parser<'src> {
+
+    pub fn new(scanner_: Scanner) -> Self {
+        Self{
+            scanner: scanner_,
+            current: Token::default(),
+            previous: Token::default(),
+            had_error: false,
+            panic_mode: false,
+        }
+    }
+
     pub fn advance(&mut self) {
         loop {
             let temp: Token<'_> = self.scanner.scan_token().unwrap();
@@ -32,6 +43,25 @@ impl<'src> Parser<'src> {
         }
     }
 
+    fn consume(&mut self, kind: Kind, msg: &'static str) {
+        if self.current.kind == kind {
+            self.advance();
+            return;
+        } 
+        self.error_at_current(msg);
+    }
+
+    // byte may be opcode or operand
+    fn emit_byte(&self, byte: u8, chunk: &mut Chunk) {
+        chunk.write(byte, self.previous.line);
+    }
+
+    fn emit_bytes(&self, byte_1: u8, byte_2: u8, chunk: &mut Chunk) {
+        chunk.write(byte_1, self.previous.line);
+        chunk.write(byte_2, self.previous.line);
+    }
+
+    /// --------------error handling--------------
     fn error_at_current(&mut self, message: &'static str) {
         self.error_at(&self.current.clone(), message);
     }
@@ -43,6 +73,10 @@ impl<'src> Parser<'src> {
     }
 
     fn error_at(&mut self, token: &Token<'src>, message: &str) {
+        if self.panic_mode {
+            return;
+        }
+        self.panic_mode = true;
         eprint!("[line {}] Error", token.line);
         match token.kind {
             Kind::EOF => eprint!(" at the end"),
@@ -54,20 +88,3 @@ impl<'src> Parser<'src> {
     }
 }
 
-pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
-    let mut scanner = Scanner::new(source);
-    let mut parser: Parser = todo!();
-
-    advance(scanner);
-    expression();
-    consume(Kind::EOF, "Expected end of expression.");
-    todo!()
-}
-
-fn expression() {
-    todo!()
-}
-
-fn consume(kind: Kind, msg: &str) {
-    todo!()
-}

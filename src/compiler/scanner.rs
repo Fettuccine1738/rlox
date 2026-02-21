@@ -6,65 +6,6 @@ pub struct Scanner<'src> {
     line: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Token<'src> {
-    pub kind: Kind,
-    pub lexeme: &'src str,
-    // start: usize, // ptr to the first character of our lexeme
-    // length: usize, // number of character it should contain.
-    pub line: u32,
-}
-
-#[derive(Debug, Copy, PartialEq, Clone)]
-#[repr(u8)]
-pub enum Kind {
-    // single char tokens
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-    Comma,
-    Dot,
-    Minus,
-    Plus,
-    SemiColon,
-    Slash,
-    Star,
-    // 1 or 2 character tokens
-    Bang,
-    BangEquals,
-    Equal,
-    EqualEquals,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    // Literals
-    Identifier,
-    String,
-    Number,
-    // Keywords
-    And,
-    Class,
-    Else,
-    False,
-    For,
-    Fun,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-
-    Error,
-    EOF,
-}
-
 impl<'src> Scanner<'src> {
     pub fn new(source_: &'src str) -> Self {
         Self {

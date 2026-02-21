@@ -46,7 +46,7 @@ impl VM {
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
         let mut chunk: Chunk = Chunk::new();
-        if !crate::compiler::compile(source, &mut chunk) {
+        if !crate::compiler::compile(&source, &mut chunk) {
             drop(chunk);
             return InterpretResult::CompileError;
         }
