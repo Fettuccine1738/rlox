@@ -86,7 +86,7 @@ impl VM {
                     return InterpretResult::Undefined;
                     // break;
                 }
-                OpCode::ConstantLong => {
+                OpCode::Constant24 => {
                     let constant: Value = self.read_constant(chunk, true);
                     self.stack.push(constant);
                     println!("{:?}", constant);

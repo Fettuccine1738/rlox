@@ -1,9 +1,9 @@
 use std::mem;
 
 use crate::chunk::Chunk;
-use crate::scanner::Kind;
-use crate::scanner::Scanner;
-use crate::scanner::Token;
+use crate::compiler::token::Kind;
+use crate::compiler::token::Token;
+use crate::compiler::scanner::Scanner;
 
 #[derive(Debug)]
 pub struct Parser<'src> {
@@ -12,16 +12,15 @@ pub struct Parser<'src> {
     /// This allow Rust to know the scanner borrow can end indpendently of how long
     /// the token string slices live.
     scanner: Scanner<'src>,
-    current: Token<'src>,
-    previous: Token<'src>,
+    pub current: Token<'src>,
+    pub previous: Token<'src>,
     pub had_error: bool,
     pub panic_mode: bool,
 }
 
 impl<'src> Parser<'src> {
-
-    pub fn new(scanner_: Scanner) -> Self {
-        Self{
+    pub fn new(scanner_: Scanner<'src>) -> Self {
+        Self {
             scanner: scanner_,
             current: Token::default(),
             previous: Token::default(),
@@ -43,30 +42,20 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn consume(&mut self, kind: Kind, msg: &'static str) {
+    pub fn consume(&mut self, kind: Kind, msg: &'static str) {
         if self.current.kind == kind {
             self.advance();
             return;
-        } 
+        }
         self.error_at_current(msg);
     }
 
-    // byte may be opcode or operand
-    fn emit_byte(&self, byte: u8, chunk: &mut Chunk) {
-        chunk.write(byte, self.previous.line);
-    }
-
-    fn emit_bytes(&self, byte_1: u8, byte_2: u8, chunk: &mut Chunk) {
-        chunk.write(byte_1, self.previous.line);
-        chunk.write(byte_2, self.previous.line);
-    }
-
-    /// --------------error handling--------------
-    fn error_at_current(&mut self, message: &'static str) {
+   /// --------------error handling--------------
+    pub fn error_at_current(&mut self, message: &'static str) {
         self.error_at(&self.current.clone(), message);
     }
 
-    fn error(&mut self, message: &'static str) {
+    pub fn error(&mut self, message: &'static str) {
         // unbelievable this would not work.
         self.error_at(&self.previous.clone(), message);
         // self.error_at(&self.previous, message);
@@ -87,4 +76,3 @@ impl<'src> Parser<'src> {
         self.had_error = true;
     }
 }
-

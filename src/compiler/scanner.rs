@@ -73,7 +73,7 @@ impl<'src> Scanner<'src> {
             }
             '"' => self.string(),
             // _ => todo!(),
-            _ => self.error_token("Unexpected character.")
+            _ => self.error_token("Unexpected character."),
         })
     }
 

@@ -10,7 +10,7 @@ impl Default for Token<'static> {
         Self {
             kind: Kind::False,
             lexeme: "",
-            line: u32::MAX, 
+            line: u32::MAX,
         }
     }
 }
@@ -64,4 +64,3 @@ pub enum Kind {
     Error,
     EOF,
 }
-

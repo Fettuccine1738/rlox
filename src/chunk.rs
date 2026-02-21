@@ -11,7 +11,7 @@ use std::{
 pub enum OpCode {
     Return = 0, // return from the current function.
     Constant = 1,
-    ConstantLong = 2,
+    Constant24 = 2,
     Negate = 3,
     Add = 4,
     Divide = 5,
@@ -34,7 +34,7 @@ impl TryFrom<u8> for OpCode {
         match value {
             0 => Ok(OpCode::Return),
             1 => Ok(OpCode::Constant),
-            2 => Ok(OpCode::ConstantLong),
+            2 => Ok(OpCode::Constant24),
             3 => Ok(OpCode::Negate),
             4 => Ok(OpCode::Add),
             5 => Ok(OpCode::Divide),
@@ -149,7 +149,7 @@ impl Chunk {
 
         // OpConstant -> store bytecode, store index of the value <index is only between 0-255>
         // only 256 possible combinations, problematic if we require more than that.
-        // for OpConstantLong -> store bytecode, but index could go up to 24 bits, i.e
+        // for OpConstant24 -> store bytecode, but index could go up to 24 bits, i.e
         // to get the (operand) index of the value, we may need to look at index1, index2, index3
         match op {
             OpCode::Return => {
@@ -161,7 +161,7 @@ impl Chunk {
                 println!("  OP_CONSTANT\t{}\t{}", index, self.constants[index].0);
                 offset + 2
             }
-            OpCode::ConstantLong => {
+            OpCode::Constant24 => {
                 // 24 bit operand.
                 let index = self.read_long_contant(offset);
                 let constant = self.constants[index].0;
@@ -203,7 +203,7 @@ impl Chunk {
             self.lines.push(Line(line)); // line num for constant bytecode 
             self.lines.push(Line(line)); // line num for constant value
         } else {
-            self.code.push(OpCode::ConstantLong as u8);
+            self.code.push(OpCode::Constant24 as u8);
             // resolve byte index.
             let bits = idx.to_le();
             self.code.push((bits & 0xFF) as u8);
