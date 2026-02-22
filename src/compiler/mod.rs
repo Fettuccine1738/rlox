@@ -22,6 +22,7 @@ pub struct Compiler<'a> {
 }
 
 impl Compiler<'_> {
+    // associated function
     pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
         let mut parser: Parser = Parser::new(Scanner::new(source));
         // compiling_chunk may be required later and to allow mulitple owners to mutate
@@ -187,7 +188,7 @@ impl TryFrom<u8> for Precedence {
 }
 
 // -----------------ParseRule ---------------
-
+// type ParseFn = fn(&mut Compiler, bool) -> ();
 #[derive(Debug, Clone, Copy)]
 pub struct ParseRule {
     prefix:  Option<ParseFn>, // Option<Box<dyn FnMut(&mut Compiler, bool)>>,
@@ -196,6 +197,8 @@ pub struct ParseRule {
 }
 
 impl ParseRule {
+    /// const fn because this functions are called by the static RULES block below
+    /// this allows the compiler to call this functions at compile time.
     const fn new(p_fix: ParseFn, i_fix: ParseFn, precedenc: Precedence) -> Self {
         Self {
             prefix: Some(p_fix),

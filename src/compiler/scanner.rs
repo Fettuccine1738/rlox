@@ -23,11 +23,14 @@ impl<'src> Scanner<'src> {
         if self.is_at_end() {
             self.make_token(Kind::EOF);
         }
+
         let ch: char = self.advance();
+
         if ch.is_digit(10) {
             return Some(self.number());
         }
-        if ch.is_alphabetic() || ch == '_' {
+
+        if Self::is_alpha(ch) {
             return Some(self.identifier());
         }
 
