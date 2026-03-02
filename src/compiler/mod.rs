@@ -24,7 +24,7 @@ pub struct Compiler<'a> {
 impl Compiler<'_> {
     // associated function
     pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
-        let mut parser: Parser = Parser::new(Scanner::new(source));
+        let parser: Parser = Parser::new(Scanner::new(source));
         // compiling_chunk may be required later and to allow mulitple owners to mutate
         // chunk. Rc::RefCell is being used here.
         // let _compiling_chunk: Rc<RefCell<&mut Chunk>> = Rc::new(RefCell::new(chunk));
@@ -223,7 +223,7 @@ impl ParseRule {
         }
     }
 
-    const fn new_preceedence(precedenc: Precedence) -> Self {
+    const fn new_precedence(precedenc: Precedence) -> Self {
         Self {
             prefix: None,
             infix: None,

@@ -1,3 +1,7 @@
+use crate::compiler::token::Token;
+use crate::compiler::token::Kind;
+
+// a Scanner struct must not outlive the source string it points to.
 #[derive(Debug)]
 pub struct Scanner<'src> {
     source: &'src str,
@@ -172,9 +176,6 @@ impl<'src> Scanner<'src> {
     }
 
     fn skip_whitespace(&mut self) {
-        // while let Some(' ' | '\r' | '\t') = self.peek() {
-        //     let _ = self.advance();
-        // }
         loop {
             let ch: Option<char> = self.peek();
             match ch {

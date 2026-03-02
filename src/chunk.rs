@@ -3,9 +3,8 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-// each opcode determines how many operand bytes it has and what they mean.
-// For example, return may have no operands.
-// Each new opcode should specify what its operands look like.
+// each opcode determines the size of its operands.
+// For example, OpCode::return may have no operands.
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)] // lets us represent them as bytes as C does.
 pub enum OpCode {
@@ -34,7 +33,7 @@ impl TryFrom<u8> for OpCode {
         match value {
             0 => Ok(OpCode::Return),
             1 => Ok(OpCode::Constant),
-            2 => Ok(OpCode::Constant24),
+            2 => Ok(OpCode::Constant24), // constant opcode whose operand is the next 3 bytes.
             3 => Ok(OpCode::Negate),
             4 => Ok(OpCode::Add),
             5 => Ok(OpCode::Divide),
@@ -114,7 +113,7 @@ impl Chunk {
     }
 
     // write allows user to write both opcodes and their operands
-    // write chunk only takes in opcodes and would fail if operands are passed to it.
+    // write chunk only takes in opcodes
     pub fn write(&mut self, byte: u8, line: u32) {
         self.code.push(byte);
         self.lines.push(Line(line));
@@ -145,7 +144,7 @@ impl Chunk {
         }
 
         let instruction = self.code[offset];
-        let op = OpCode::try_from(instruction).expect("");
+        let op = OpCode::try_from(instruction).expect("instruction not understood");
 
         // OpConstant -> store bytecode, store index of the value <index is only between 0-255>
         // only 256 possible combinations, problematic if we require more than that.
