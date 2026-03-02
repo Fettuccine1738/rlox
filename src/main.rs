@@ -5,6 +5,7 @@ use std::{fs, result};
 
 use rlox::chunk::Chunk;
 use rlox::chunk::*;
+use rlox::value::Value;
 use rlox::vm::{InterpretResult, VM};
 
 // TODO: transfer to test module.
@@ -13,10 +14,10 @@ fn sample_chunk() {
     let mut ch: Chunk = Chunk::new();
     // let idx = ch.add_constant(1.2);
     // ch.write_chunk(OpCode::Return, 1);
-    ch.write_constant(42.01, 2);
-    ch.write_constant(2.0, 2);
+    ch.write_constant(Value::Number(42.01), 2);
+    ch.write_constant(Value::Number(2.0), 2);
     ch.write_chunk(OpCode::Add, 2);
-    ch.write_constant(5.6, 2);
+    ch.write_constant(Value::Number(1.0), 2);
     ch.write_chunk(OpCode::Divide, 2);
     ch.write_chunk(OpCode::Negate, 2);
     ch.write_chunk(OpCode::Return, 2);

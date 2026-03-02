@@ -1,6 +1,3 @@
-use std::mem;
-
-use crate::chunk::Chunk;
 use crate::compiler::token::Kind;
 use crate::compiler::token::Token;
 use crate::compiler::scanner::Scanner;
@@ -9,10 +6,11 @@ use crate::compiler::scanner::Scanner;
 pub struct Parser<'src> {
     /// 'src is the lifetime of the source string slices stored in tokens and
     /// 'scn is the shorter lifetime of the mutable borrow of the scanner itself.
-    /// This allow Rust to know the scanner borrow can end indpendently of how long
+    ///  this would have been relevant if we borrowed scanner like this: &'scn mut Scanner<'src>
+    /// This lets Rust to know the scanner borrow can end indpendently of how long
     /// the token string slices live.
     scanner: Scanner<'src>,
-    pub current: Token<'src>,
+    pub current:  Token<'src>,
     pub previous: Token<'src>,
     pub had_error: bool,
     pub panic_mode: bool,
@@ -22,8 +20,8 @@ impl<'src> Parser<'src> {
     pub fn new(scanner_: Scanner<'src>) -> Self {
         Self {
             scanner: scanner_,
-            current: Token::default(),
-            previous: Token::default(),
+            current:   Token::default(),
+            previous:  Token::default(),
             had_error: false,
             panic_mode: false,
         }
@@ -33,7 +31,7 @@ impl<'src> Parser<'src> {
         loop {
             let temp: Token<'_> = self.scanner.scan_token().unwrap();
             // mem::replace returns old value of mutable ref of destination and initializes with new value temp.
-            self.previous = mem::replace(&mut self.current, temp);
+            self.previous = std::mem::replace(&mut self.current, temp);
 
             if self.current.kind != Kind::Error {
                 break;
@@ -52,16 +50,16 @@ impl<'src> Parser<'src> {
 
    /// --------------error handling--------------
     pub fn error_at_current(&mut self, message: &'static str) {
-        self.error_at(&self.current.clone(), message);
+        self.error_at(self.current.clone(), message);
     }
 
     pub fn error(&mut self, message: &'static str) {
-        // unbelievable this would not work.
-        self.error_at(&self.previous.clone(), message);
-        // self.error_at(&self.previous, message);
+        // unbelievable this would not work., would Token be valid after this call ??
+        // self.error_at(self.previous, message);
+        self.error_at(self.previous.clone(), message);
     }
 
-    fn error_at(&mut self, token: &Token<'src>, message: &str) {
+    fn error_at(&mut self, token: Token<'src>, message: &str) {
         if self.panic_mode {
             return;
         }

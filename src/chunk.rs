@@ -1,7 +1,5 @@
-use std::{
-    fmt::Display,
-    ops::{Add, Div, Mul, Neg, Sub},
-};
+use std::fmt::Display;
+use crate::value::Value;
 
 // each opcode determines the size of its operands.
 // For example, OpCode::return may have no operands.
@@ -16,6 +14,10 @@ pub enum OpCode {
     Divide = 5,
     Multiply = 6,
     Subtract = 7,
+    NIL = 8,
+    True = 9,
+    False = 10,
+    Not = 11,
 }
 
 impl Display for OpCode {
@@ -39,57 +41,19 @@ impl TryFrom<u8> for OpCode {
             5 => Ok(OpCode::Divide),
             6 => Ok(OpCode::Multiply),
             7 => Ok(OpCode::Subtract),
+            8 => Ok(OpCode::NIL),
+            9 => Ok(OpCode::True),
+            10 => Ok(OpCode::False),
+            11 => Ok(OpCode::Not),
             _ => Err(()),
         }
     }
 }
 
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Line(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Value(pub f64);
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Neg for Value {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        Self(-self.0)
-    }
-}
-
-impl Add for Value {
-    type Output = Self;
-    fn add(self, other: Self) -> Self::Output {
-        Self(self.0 + other.0)
-    }
-}
-
-impl Div for Value {
-    type Output = Self;
-    fn div(self, other: Self) -> Self::Output {
-        Self(self.0 / other.0)
-    }
-}
-
-impl Mul for Value {
-    type Output = Self;
-    fn mul(self, other: Self) -> Self::Output {
-        Self(self.0 * other.0)
-    }
-}
-
-impl Sub for Value {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self::Output {
-        Self(self.0 - other.0)
-    }
-}
 
 // CHALLENGE: to generate a minimal instruction set eliminating
 // either OP_NEGATE or OP_SUBSTRACT: 4 - 3 * -2
@@ -120,30 +84,29 @@ impl Chunk {
     }
 
     pub fn write_chunk(&mut self, op_code: OpCode, line: u32) {
-        self.code.push(op_code as u8);
-        self.lines.push(Line(line));
+        self.write(op_code as u8, line);
     }
 
-    pub fn disassemble(&self, name: &str) {
+    pub fn disassemble(chunk: &Chunk, name: &str) {
         println!("====={name}=====");
         let mut i = 0usize;
 
-        while i < self.code.len() {
-            i = self.disassemble_instruction(i);
+        while i < chunk.code.len() {
+            i = Self::disassemble_instruction(chunk, i);
         }
     }
 
-    pub fn disassemble_instruction(&self, offset: usize) -> usize {
+    pub fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
         print!("{:04} ", offset);
-        let line = self.lines[offset].0;
+        let line = chunk.lines[offset].0;
 
-        if offset > 0 && line == self.lines[offset - 1].0 {
+        if offset > 0 && line == chunk.lines[offset - 1].0 {
             print!("    | ");
         } else {
             print!("{:4} ", line);
         }
 
-        let instruction = self.code[offset];
+        let instruction = chunk.code[offset];
         let op = OpCode::try_from(instruction).expect("instruction not understood");
 
         // OpConstant -> store bytecode, store index of the value <index is only between 0-255>
@@ -156,14 +119,14 @@ impl Chunk {
                 offset + 1
             }
             OpCode::Constant => {
-                let index = self.read_constant(offset);
-                println!("  OP_CONSTANT\t{}\t{}", index, self.constants[index].0);
+                let index = chunk.read_constant(offset);
+                println!("  OP_CONSTANT\t{}\t{}", index, chunk.constants[index]);
                 offset + 2
             }
             OpCode::Constant24 => {
                 // 24 bit operand.
-                let index = self.read_long_contant(offset);
-                let constant = self.constants[index].0;
+                let index = chunk.read_long_contant(offset);
+                let constant = chunk.constants[index];
                 println!("  OP_CONSTANT_LONG\t{}\t{constant}", index);
                 offset + 4 // consume op_code_long, byte, byte, byte 
             } // _ => panic!()
@@ -174,13 +137,26 @@ impl Chunk {
                 println!("  OP_{:?}", op);
                 offset + 1
             }
-            _ => todo!(),
+            OpCode::True => {
+                todo!()
+            }
+            OpCode::False => {
+                todo!()
+            }
+            OpCode::NIL => {
+                print!("nil");
+                offset + 1
+            }
+            OpCode::Not => {
+                todo!()
+            }
+            // _ => todo!(),
         }
     }
 
-    // reads the corresponding value of the OP_CONSTANT_LONG operand 24 bits and
-    // returns its a usize to index into the constants array
-    fn read_long_contant(&self, offset: usize) -> usize {
+    // reads the corresponding value of the OP_CONSTANT24 operand 24 bits and
+    // returns a usize to index into the constants array
+    fn read_long_constant(&self, offset: usize) -> usize {
         let bytes = &self.code[offset + 1..offset + 4];
         let idx = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16; // 24 bits
         return idx as usize;
@@ -193,7 +169,7 @@ impl Chunk {
 
     // constants have an additional operand the index in the constants buffer;
     // 1 or 3 byte is used up depending on the byte_code.
-    pub fn write_constant(&mut self, value: f64, line: u32) {
+    pub fn write_constant(&mut self, value: Value, line: u32) {
         let idx = self.add_constant(value);
         // if the index of stored constant is > 256, we use the OP_CONSTANT_LONG
         if idx < 256 {
@@ -218,8 +194,8 @@ impl Chunk {
         assert_eq!(self.code.len(), self.lines.len())
     }
 
-    pub fn add_constant(&mut self, value: f64) -> usize {
-        self.constants.push(Value(value));
+    pub fn add_constant(&mut self, value: Value) -> usize {
+        self.constants.push(value);
         self.constants.len() - 1 // index of the last push
     }
 }

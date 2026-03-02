@@ -1,13 +1,10 @@
-use core::error;
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Sub;
+use std::ops::{Add, Div, Sub, Mul};
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
-use crate::chunk::Value;
+use crate::value::Value;
+use crate::compiler::Compiler;
 use crate::lox_errors::VmError;
 
 pub const DEBUG_TRACE: bool = true;
@@ -18,7 +15,6 @@ pub enum InterpretResult {
     Ok,
     CompileError,
     RuntimeError,
-    Undefined,
 }
 
 pub struct VM {
@@ -46,7 +42,7 @@ impl VM {
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
         let mut chunk: Chunk = Chunk::new();
-        if !crate::compiler::compile(&source, &mut chunk) {
+        if !Compiler::compile(&source, &mut chunk) {
             drop(chunk);
             return InterpretResult::CompileError;
         }
@@ -64,14 +60,20 @@ impl VM {
         self.stack.pop()
     }
 
+    fn peek(&mut self, distance: usize) -> Value {
+        self.stack[self.stack.len() - 1 - distance]
+    }
+
     fn run(&mut self, chunk: &Chunk) -> InterpretResult {
         loop {
+            #[cfg(debug_assertions)]
             if DEBUG_TRACE {
                 println!("{:?}", self.stack);
-                chunk.disassemble_instruction(self.ip);
+                Chunk::disassemble_instruction(chunk, self.ip);
             }
 
             let instruction: OpCode = OpCode::try_from(self.read_byte(chunk)).expect("");
+
             match instruction {
                 OpCode::Return => {
                     if let Some(v) = self.stack.pop() {
@@ -83,39 +85,52 @@ impl VM {
                     let constant: Value = self.read_constant(chunk, false);
                     self.stack.push(constant); // self.push_value(constant)
                     println!("{:?}", constant);
-                    return InterpretResult::Undefined;
-                    // break;
                 }
                 OpCode::Constant24 => {
                     let constant: Value = self.read_constant(chunk, true);
                     self.stack.push(constant);
                     println!("{:?}", constant);
-                    return InterpretResult::Undefined;
-                    // break;
                 }
-                OpCode::Negate => {
-                    if let Some(constant) = self.stack.pop() {
-                        self.stack.push(-constant);
+                OpCode::Negate => if !Value::is_number(&self.stack[self.stack.len() - 1]) {
+                        Self::runtime_error(self, chunk, "Operand must be a number.");
+                        return InterpretResult::RuntimeError;
+                    } else {
+                        let num_value = self.stack.pop().unwrap();
+                        self.stack.push((-num_value).unwrap());
                     }
-                }
                 OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
                     let result = Self::binary_op(lhs, rhs, instruction);
-                    self.stack.push(result);
-                    return InterpretResult::Undefined;
+                    self.stack.push(result.unwrap());
                 }
-                _ => todo!(),
+                OpCode::NIL => {
+                    self.stack.push(Value::Nil);
+                }
+                OpCode::True => {
+                    self.stack.push(Value::Boolean(true));
+                }
+                OpCode::False => {
+                    self.stack.push(Value::Boolean(false));
+                }
+                OpCode::Not => {
+                    todo!()
+                }
             }
         }
+    }
+
+    fn runtime_error(vm: &mut VM, chunk: &Chunk, msg: &'static str) {
+        eprintln!("{}", msg);
+        let instruction: usize = vm.ip - 1;
+        let line = chunk.lines[instruction];
+        eprintln!("[line {}] in script", line.0);
+        vm.reset_stack();
     }
 
     // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
     fn read_constant(&mut self, chunk: &Chunk, is_long: bool) -> Value {
         let index = if is_long {
-            // let index = self.chunk.read_
-            // let bytes = &chunk.code[self.ip..self.ip + 3];
-            // let index = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16;
             let b1 = self.read_byte(chunk) as u32;
             let b2 = self.read_byte(chunk) as u32;
             let b3 = self.read_byte(chunk) as u32;
@@ -137,7 +152,7 @@ impl VM {
         byte_code
     }
 
-    fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Value {
+    fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Option<Value> {
         match opcode {
             OpCode::Add => lhs.add(rhs),
             OpCode::Divide => lhs.div(rhs),

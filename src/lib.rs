@@ -1,5 +1,5 @@
 pub mod chunk;
-pub mod common;
+pub mod value;
 pub mod compiler;
 pub mod lox_errors;
 pub mod vm;

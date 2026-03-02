@@ -4,16 +4,13 @@ pub mod token;
 
 // use std::cell::RefCell;
 // use std::rc::Rc;
-use std::f64;
-
 use self::parser::Parser;
 use self::scanner::Scanner;
 use self::token::Kind;
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
+use crate::value::Value;
 
-/// used by ParseRule
-type ParseFn = fn(&mut Compiler, bool) -> ();
 
 #[derive(Debug)]
 pub struct Compiler<'a> {
@@ -22,7 +19,7 @@ pub struct Compiler<'a> {
 }
 
 impl Compiler<'_> {
-    // associated function
+    // associated function, like java static functions
     pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
         let parser: Parser = Parser::new(Scanner::new(source));
         // compiling_chunk may be required later and to allow mulitple owners to mutate
@@ -59,7 +56,7 @@ impl Compiler<'_> {
        self.chunk.write(byte_2, self.parser.previous.line);
     }
 
-    fn emit_constant(&mut self, value: f64) {
+    fn emit_constant(&mut self, value: Value) {
         let op: OpCode = Self::make_constant(value, self.chunk);
         self.emit_byte(op as u8);
     }
@@ -69,12 +66,20 @@ impl Compiler<'_> {
     }
 
     fn end_compilation(&mut self) {
-        todo!()
+        #[cfg(debug_assertions)] // analogous to a #ifdef block in C
+        // custom features could be used too. #[cfg(feature="")] 
+        if self.parser.had_error {
+            Chunk::disassemble(self.current_chunk(), "code");
+        }
+    }
+
+    fn current_chunk(&self) -> &Chunk {
+        self.chunk
     }
     
     fn number(&mut self) {
         let value: f64 = self.parser.previous.lexeme.parse::<f64>().unwrap();  
-        self.emit_constant(value);
+        self.emit_constant(Value::Number(value));
     }
 
     // grouping does not need to emit any byte code. its syntax to insert a 
@@ -95,6 +100,9 @@ impl Compiler<'_> {
             Kind::Minus => {
                 self.emit_byte(OpCode::Negate as u8);
             }
+            Kind::Bang => {
+                self.emit_byte(OpCode::Not as u8);
+            }
             _ => (),
         }
     }
@@ -110,6 +118,15 @@ impl Compiler<'_> {
             Kind::Star => self.emit_byte(OpCode::Multiply as u8),
             Kind::Slash => self.emit_byte(OpCode::Divide as u8),
             _ => (),
+        }
+    }
+
+    fn literal(&mut self) {
+        match self.parser.previous.kind {
+            Kind::False => self.emit_byte(OpCode::False as u8),
+            Kind::True => self.emit_byte(OpCode::True as u8),
+            Kind::Nil => self.emit_byte(OpCode::NIL as u8),
+            _ => ()
         }
     }
 
@@ -133,7 +150,7 @@ impl Compiler<'_> {
     }
 
     /// ---------associated functions------------------
-    fn make_constant(value: f64, chunk: &mut Chunk) -> OpCode {
+    fn make_constant(value: Value, chunk: &mut Chunk) -> OpCode {
         let index = chunk.add_constant(value);
         if index > std::u8::MAX as usize {
             OpCode::Constant
@@ -188,6 +205,7 @@ impl TryFrom<u8> for Precedence {
 }
 
 // -----------------ParseRule ---------------
+type ParseFn = fn(&mut Compiler, bool) -> ();
 // type ParseFn = fn(&mut Compiler, bool) -> ();
 #[derive(Debug, Clone, Copy)]
 pub struct ParseRule {
@@ -241,8 +259,8 @@ impl ParseRule {
 }
 
 static RULES: [ParseRule; 40] = {
-    let none = ParseRule::default();
-    let mut  rules = [none; 40];
+    let default = ParseRule::default();
+    let mut  rules = [default; 40];
 
     rules[(Kind::LeftParen as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.grouping(), Precedence::None);
     rules[(Kind::Minus as u8) as usize] = ParseRule::new(|compiler, _| compiler.unary(),  
@@ -251,6 +269,11 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::Slash as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Factor);
     rules[(Kind::Star as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Factor);
     rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.number(),  Precedence::Factor);
+    rules[(Kind::False as u8) as usize] = ParseRule::new_prefix(|compiler, _|  compiler.literal(),  Precedence::None);
+    rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
+    rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
+    rules[(Kind::Bang as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.unary(),  Precedence::None);
+
 
     rules
 };
