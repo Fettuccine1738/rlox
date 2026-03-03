@@ -18,6 +18,16 @@ pub enum OpCode {
     True = 9,
     False = 10,
     Not = 11,
+    Equal = 12,
+    Greater = 13,
+    Less = 14,
+    // Design choice on why OpCodes for !=, <=, >= are not implemented.
+    // the bytecode instructions does not need to follow closely to the user's
+    // source code. The VM has total freedom to use whatever instruction set and code sequence
+    // as long as they have the right behavior.
+    // Semantically: a != b  === !(a == b)
+    // a <= b === !(a > b)
+    // a >= b === !(a < b). except for floating-point NaN
 }
 
 impl Display for OpCode {
@@ -33,18 +43,21 @@ impl TryFrom<u8> for OpCode {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(OpCode::Return),
-            1 => Ok(OpCode::Constant),
-            2 => Ok(OpCode::Constant24), // constant opcode whose operand is the next 3 bytes.
-            3 => Ok(OpCode::Negate),
-            4 => Ok(OpCode::Add),
-            5 => Ok(OpCode::Divide),
-            6 => Ok(OpCode::Multiply),
-            7 => Ok(OpCode::Subtract),
-            8 => Ok(OpCode::NIL),
-            9 => Ok(OpCode::True),
-            10 => Ok(OpCode::False),
-            11 => Ok(OpCode::Not),
+            0 => Ok(Self::Return),
+            1 => Ok(Self::Constant),
+            2 => Ok(Self::Constant24), // constant opcode whose operand is the next 3 bytes.
+            3 => Ok(Self::Negate),
+            4 => Ok(Self::Add),
+            5 => Ok(Self::Divide),
+            6 => Ok(Self::Multiply),
+            7 => Ok(Self::Subtract),
+            8 => Ok(Self::NIL),
+            9 => Ok(Self::True),
+            10 => Ok(Self::False),
+            11 => Ok(Self::Not),
+            12 => Ok(Self::Equal),  
+            13 => Ok(Self::Greater),  
+            14 => Ok(Self::Less),  
             _ => Err(()),
         }
     }
@@ -125,7 +138,7 @@ impl Chunk {
             }
             OpCode::Constant24 => {
                 // 24 bit operand.
-                let index = chunk.read_long_contant(offset);
+                let index = chunk.read_long_constant(offset);
                 let constant = chunk.constants[index];
                 println!("  OP_CONSTANT_LONG\t{}\t{constant}", index);
                 offset + 4 // consume op_code_long, byte, byte, byte 
@@ -150,8 +163,20 @@ impl Chunk {
             OpCode::Not => {
                 todo!()
             }
+            OpCode::Equal => {
+                todo!()
+            }
+            OpCode::Greater => {
+                todo!()
+            }OpCode::Less => {
+                todo!()
+            }
             // _ => todo!(),
         }
+    }
+
+    fn simple_instruction(name: &str, offset: usize) {
+        todo!()
     }
 
     // reads the corresponding value of the OP_CONSTANT24 operand 24 bits and
@@ -199,3 +224,4 @@ impl Chunk {
         self.constants.len() - 1 // index of the last push
     }
 }
+

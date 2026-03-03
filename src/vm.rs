@@ -114,10 +114,17 @@ impl VM {
                     self.stack.push(Value::Boolean(false));
                 }
                 OpCode::Not => {
-                    todo!()
+                    let value: bool = Self::is_falsey(self.stack.pop().unwrap());
+                    self.stack.push(Value::Boolean(value));
                 }
             }
         }
+    }
+
+    // falsiness handles how other types are negated('not'ed)
+    // e.g !nil, !"string"
+    fn is_falsey(value: Value) -> bool {
+        Value::is_nil(&value) || (Value::is_bool(&value) && !Value::as_bool(&value))
     }
 
     fn runtime_error(vm: &mut VM, chunk: &Chunk, msg: &'static str) {

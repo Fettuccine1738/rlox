@@ -46,9 +46,16 @@ impl Compiler<'_> {
         self.emit_byte(OpCode::Return as u8);
     }
 
+    fn emit_op_code_byte(&mut self, op_code: OpCode) {
+        self.emit_byte(op_code as u8);
+    }
     // byte may be opcode or operand
     fn emit_byte(&mut self, byte: u8) {
         self.chunk.write(byte, self.parser.previous.line);
+    }
+
+    fn emit_op_code_bytes(&mut self, op_1: OpCode, op_2: OpCode) {
+        self.emit_bytes(op_1 as u8, op_2 as u8);
     }
 
     fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
@@ -117,6 +124,12 @@ impl Compiler<'_> {
             Kind::Minus => self.emit_byte(OpCode::Subtract as u8),
             Kind::Star => self.emit_byte(OpCode::Multiply as u8),
             Kind::Slash => self.emit_byte(OpCode::Divide as u8),
+            Kind::BangEquals => self.emit_op_code_bytes(OpCode::Equal, OpCode::Not),
+            Kind::EqualEquals => self.emit_op_code_byte(OpCode::Equal),
+            Kind::Greater => self.emit_op_code_byte(OpCode::Greater),
+            Kind::GreaterEqual => self.emit_op_code_bytes(OpCode::Less, OpCode::Not),
+            Kind::Less => self.emit_op_code_byte(OpCode::Less),
+            Kind::LessEqual => self.emit_op_code_bytes(OpCode::Greater, OpCode::Not),
             _ => (),
         }
     }
@@ -273,6 +286,12 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
     rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
     rules[(Kind::Bang as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.unary(),  Precedence::None);
+    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Equality);
+    rules[(Kind::EqualEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Equality);
+    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
 
 
     rules
