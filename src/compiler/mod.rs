@@ -37,11 +37,7 @@ impl Compiler<'_> {
     }
 
     fn consume(&mut self, kind: Kind, err_msg: &'static str) {
-        todo!()
-    }
-
-    fn end_compiler(&mut self) {
-        self.emit_return();
+        self.parser.consume(kind, err_msg);
     }
 
     fn emit_return(&mut self) {
@@ -75,6 +71,7 @@ impl Compiler<'_> {
     }
 
     fn end_compilation(&mut self) {
+        self.emit_return();
         #[cfg(debug_assertions)] // analogous to a #ifdef block in C
         // custom features could be used too. #[cfg(feature="")]
         if self.parser.had_error {
