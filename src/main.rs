@@ -1,12 +1,10 @@
-use std::env::{Args, args_os};
-use std::error::Error;
 use std::io;
-use std::{fs, result};
+use std::fs;
 
 use rlox::chunk::Chunk;
 use rlox::chunk::*;
 use rlox::value::Value;
-use rlox::vm::{InterpretResult, VM};
+use rlox::vm::InterpretResult;
 
 // TODO: transfer to test module.
 fn sample_chunk() {
@@ -63,7 +61,7 @@ pub fn run_file(path: &str) {
     }
 }
 
-fn interpret(input: &str) -> InterpretResult {
+fn interpret(_input: &str) -> InterpretResult {
     todo!()
 }
 
@@ -74,7 +72,7 @@ fn main() {
     if arg_count == 1 {
         repl();
     } else if arg_count == 2 {
-        let path = args[1].to_owned();
+        let _path = args[1].to_owned();
         todo!()
     } else {
         eprintln!("Usage: rlox path[]");
