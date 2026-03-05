@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use crate::value::Value;
+use std::fmt::Display;
 
 // each opcode determines the size of its operands.
 // For example, OpCode::return may have no operands.
@@ -55,18 +55,16 @@ impl TryFrom<u8> for OpCode {
             9 => Ok(Self::True),
             10 => Ok(Self::False),
             11 => Ok(Self::Not),
-            12 => Ok(Self::Equal),  
-            13 => Ok(Self::Greater),  
-            14 => Ok(Self::Less),  
+            12 => Ok(Self::Equal),
+            13 => Ok(Self::Greater),
+            14 => Ok(Self::Less),
             _ => Err(()),
         }
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Line(pub u32);
-
 
 // CHALLENGE: to generate a minimal instruction set eliminating
 // either OP_NEGATE or OP_SUBSTRACT: 4 - 3 * -2
@@ -150,33 +148,24 @@ impl Chunk {
                 println!("  OP_{:?}", op);
                 offset + 1
             }
-            OpCode::True => {
-                todo!()
-            }
-            OpCode::False => {
-                todo!()
-            }
-            OpCode::NIL => {
-                print!("nil");
-                offset + 1
-            }
+            OpCode::True => Self::simple_instruction("OP_TRUE", offset),
+            OpCode::False => Self::simple_instruction("OP_FALSE", offset),
+            OpCode::NIL => Self::simple_instruction("OP_NIL", offset),
             OpCode::Not => {
                 todo!()
             }
-            OpCode::Equal => {
-                todo!()
-            }
-            OpCode::Greater => {
-                todo!()
-            }OpCode::Less => {
-                todo!()
-            }
-            // _ => todo!(),
+            OpCode::Equal => Self::simple_instruction("OP_EQUAL", offset),
+            OpCode::Greater => Self::simple_instruction("OP_GREATER", offset),
+            OpCode::Less => Self::simple_instruction("OP_LESS", offset), // _ => {
+                                                                         //     println!("Unknown opcode {}", instruction);
+                                                                         //     offset + 1
+                                                                         //  },
         }
     }
 
-    fn simple_instruction(name: &str, offset: usize) {
-        todo!()
+    fn simple_instruction(name: &str, offset: usize) -> usize {
+        println!("   {name}");
+        offset + 1
     }
 
     // reads the corresponding value of the OP_CONSTANT24 operand 24 bits and
@@ -224,4 +213,3 @@ impl Chunk {
         self.constants.len() - 1 // index of the last push
     }
 }
-

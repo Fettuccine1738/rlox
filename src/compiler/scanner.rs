@@ -1,5 +1,5 @@
-use crate::compiler::token::Token;
 use crate::compiler::token::Kind;
+use crate::compiler::token::Token;
 
 // a Scanner struct must not outlive the source string it points to.
 #[derive(Debug)]

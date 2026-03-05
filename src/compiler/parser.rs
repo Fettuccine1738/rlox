@@ -1,6 +1,6 @@
+use crate::compiler::scanner::Scanner;
 use crate::compiler::token::Kind;
 use crate::compiler::token::Token;
-use crate::compiler::scanner::Scanner;
 
 #[derive(Debug)]
 pub struct Parser<'src> {
@@ -10,7 +10,7 @@ pub struct Parser<'src> {
     /// This lets Rust to know the scanner borrow can end indpendently of how long
     /// the token string slices live.
     scanner: Scanner<'src>,
-    pub current:  Token<'src>,
+    pub current: Token<'src>,
     pub previous: Token<'src>,
     pub had_error: bool,
     pub panic_mode: bool,
@@ -20,8 +20,8 @@ impl<'src> Parser<'src> {
     pub fn new(scanner_: Scanner<'src>) -> Self {
         Self {
             scanner: scanner_,
-            current:   Token::default(),
-            previous:  Token::default(),
+            current: Token::default(),
+            previous: Token::default(),
             had_error: false,
             panic_mode: false,
         }
@@ -48,7 +48,7 @@ impl<'src> Parser<'src> {
         self.error_at_current(msg);
     }
 
-   /// --------------error handling--------------
+    /// --------------error handling--------------
     pub fn error_at_current(&mut self, message: &'static str) {
         self.error_at(self.current.clone(), message);
     }

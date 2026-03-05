@@ -3,15 +3,14 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
-/// payload for the actual value. 
+/// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
 #[derive(Debug, Copy, Clone)]
 pub enum Value {
     Boolean(bool),
     Nil,
-    Number(f64)
+    Number(f64),
 }
 
 impl Value {
@@ -75,8 +74,8 @@ impl Add for Value {
 
     fn add(self, other: Self) -> Self::Output {
         match (&self, &other) {
-            (Value::Number(l) , Value::Number(r)) => Some(Value::Number(l + r)),
-            _ => None
+            (Value::Number(l), Value::Number(r)) => Some(Value::Number(l + r)),
+            _ => None,
         }
     }
 }
@@ -86,8 +85,8 @@ impl Div for Value {
 
     fn div(self, other: Self) -> Self::Output {
         match (&self, &other) {
-            (Value::Number(l) , Value::Number(r)) => Some(Value::Number(l / r)),
-            _ => None
+            (Value::Number(l), Value::Number(r)) => Some(Value::Number(l / r)),
+            _ => None,
         }
     }
 }
@@ -97,8 +96,8 @@ impl Mul for Value {
 
     fn mul(self, other: Self) -> Self::Output {
         match (&self, &other) {
-            (Value::Number(l) , Value::Number(r)) => Some(Value::Number(l * r)),
-            _ => None
+            (Value::Number(l), Value::Number(r)) => Some(Value::Number(l * r)),
+            _ => None,
         }
     }
 }
@@ -108,9 +107,8 @@ impl Sub for Value {
 
     fn sub(self, other: Self) -> Self::Output {
         match (&self, &other) {
-            (Value::Number(l) , Value::Number(r)) => Some(Value::Number(l - r)),
-            _ => None
+            (Value::Number(l), Value::Number(r)) => Some(Value::Number(l - r)),
+            _ => None,
         }
     }
 }
-

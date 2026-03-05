@@ -1,15 +1,16 @@
-use std::ops::{Add, Div, Sub, Mul};
+use std::ops::{Add, Div, Mul, Sub};
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
-use crate::value::Value;
 use crate::compiler::Compiler;
 use crate::lox_errors::VmError;
+use crate::value::Value;
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
 
+#[derive(Debug, PartialEq)]
 #[repr(u8)]
 pub enum InterpretResult {
     Ok,
@@ -91,13 +92,15 @@ impl VM {
                     self.stack.push(constant);
                     println!("{:?}", constant);
                 }
-                OpCode::Negate => if !Value::is_number(&self.stack[self.stack.len() - 1]) {
+                OpCode::Negate => {
+                    if !Value::is_number(&self.stack[self.stack.len() - 1]) {
                         Self::runtime_error(self, chunk, "Operand must be a number.");
                         return InterpretResult::RuntimeError;
                     } else {
                         let num_value = self.stack.pop().unwrap();
                         self.stack.push((-num_value).unwrap());
                     }
+                }
                 OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
@@ -117,7 +120,23 @@ impl VM {
                     let value: bool = Self::is_falsey(self.stack.pop().unwrap());
                     self.stack.push(Value::Boolean(value));
                 }
+                OpCode::Equal => {
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    let c = Self::values_equal(a.unwrap(), b.unwrap());
+                    self.stack.push(Value::Boolean(c));
+                }
+                _ => todo!(),
             }
+        }
+    }
+
+    fn values_equal(a: Value, b: Value) -> bool {
+        match (a, b) {
+            (Value::Boolean(av), Value::Boolean(bv)) => av == bv,
+            (Value::Nil, Value::Nil) => true,
+            (Value::Number(av), Value::Number(bv)) => av == bv,
+            _ => false,
         }
     }
 

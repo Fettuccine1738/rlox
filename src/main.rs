@@ -23,7 +23,7 @@ fn sample_chunk() {
     ch.write_chunk(OpCode::Return, 2);
 
     // dbg!(&ch);
-    ch.disassemble("test bytes");
+    Chunk::disassemble(&ch, "test bytes");
     // virtual_machine.
 }
 

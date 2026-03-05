@@ -11,11 +11,10 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::value::Value;
 
-
 #[derive(Debug)]
 pub struct Compiler<'a> {
     parser: Parser<'a>,
-    chunk: &'a  mut Chunk,
+    chunk: &'a mut Chunk,
 }
 
 impl Compiler<'_> {
@@ -25,7 +24,10 @@ impl Compiler<'_> {
         // compiling_chunk may be required later and to allow mulitple owners to mutate
         // chunk. Rc::RefCell is being used here.
         // let _compiling_chunk: Rc<RefCell<&mut Chunk>> = Rc::new(RefCell::new(chunk));
-        let mut compiler: Compiler = Compiler { parser, chunk: chunk };
+        let mut compiler: Compiler = Compiler {
+            parser,
+            chunk: chunk,
+        };
         compiler.parser.advance();
         compiler.expression();
         compiler.consume(Kind::EOF, "Expected end of expression.");
@@ -59,22 +61,22 @@ impl Compiler<'_> {
     }
 
     fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
-       self.chunk.write(byte_1, self.parser.previous.line);
-       self.chunk.write(byte_2, self.parser.previous.line);
+        self.chunk.write(byte_1, self.parser.previous.line);
+        self.chunk.write(byte_2, self.parser.previous.line);
     }
 
     fn emit_constant(&mut self, value: Value) {
         let op: OpCode = Self::make_constant(value, self.chunk);
         self.emit_byte(op as u8);
     }
- 
+
     fn expression(&mut self) {
         self.parse_precedence(Precedence::Assignment);
     }
 
     fn end_compilation(&mut self) {
         #[cfg(debug_assertions)] // analogous to a #ifdef block in C
-        // custom features could be used too. #[cfg(feature="")] 
+        // custom features could be used too. #[cfg(feature="")]
         if self.parser.had_error {
             Chunk::disassemble(self.current_chunk(), "code");
         }
@@ -83,13 +85,13 @@ impl Compiler<'_> {
     fn current_chunk(&self) -> &Chunk {
         self.chunk
     }
-    
+
     fn number(&mut self) {
-        let value: f64 = self.parser.previous.lexeme.parse::<f64>().unwrap();  
+        let value: f64 = self.parser.previous.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value));
     }
 
-    // grouping does not need to emit any byte code. its syntax to insert a 
+    // grouping does not need to emit any byte code. its syntax to insert a
     // lower-precedence expression where a higher one is expected.
     fn grouping(&mut self) {
         self.expression();
@@ -102,7 +104,7 @@ impl Compiler<'_> {
         self.expression(); // compile the operand
         // emit the operator instruction
         // NOTE: unary operator is emitted after its operand (expr) because our vm
-        // is stack based. we negate what is on the stack. 
+        // is stack based. we negate what is on the stack.
         match operator {
             Kind::Minus => {
                 self.emit_byte(OpCode::Negate as u8);
@@ -139,7 +141,7 @@ impl Compiler<'_> {
             Kind::False => self.emit_byte(OpCode::False as u8),
             Kind::True => self.emit_byte(OpCode::True as u8),
             Kind::Nil => self.emit_byte(OpCode::NIL as u8),
-            _ => ()
+            _ => (),
         }
     }
 
@@ -151,9 +153,13 @@ impl Compiler<'_> {
         if let Some(prefix) = Self::get_parse_rule(self.parser.previous.kind).prefix {
             prefix(self, false);
 
-            while (precedence as u8) < (Self::get_parse_rule(self.parser.current.kind).precedence as u8) {
+            while (precedence as u8)
+                < (Self::get_parse_rule(self.parser.current.kind).precedence as u8)
+            {
                 self.parser.advance();
-                let infix: ParseFn = Self::get_parse_rule(self.parser.previous.kind).infix.unwrap();
+                let infix: ParseFn = Self::get_parse_rule(self.parser.previous.kind)
+                    .infix
+                    .unwrap();
                 infix(self, false);
             }
         } else {
@@ -177,7 +183,6 @@ impl Compiler<'_> {
     }
 }
 
-
 //-----------------Precedence-------------------
 // Lox's precedence levels in order from lowest to highest
 #[derive(Debug, Clone, Copy)]
@@ -185,15 +190,15 @@ impl Compiler<'_> {
 pub enum Precedence {
     None = 0,
     Assignment, // =
-    Or, // or
-    And, // and
-    Equality, // ==, !=
+    Or,         // or
+    And,        // and
+    Equality,   // ==, !=
     Comparison, // <> <= >=
-    Term, // + -
-    Factor, // * /   
-    Unary, // ! -
-    Call, // . ()
-    Primary = 10
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // ! -
+    Call,       // . ()
+    Primary = 10,
 }
 
 impl TryFrom<u8> for Precedence {
@@ -222,8 +227,8 @@ type ParseFn = fn(&mut Compiler, bool) -> ();
 // type ParseFn = fn(&mut Compiler, bool) -> ();
 #[derive(Debug, Clone, Copy)]
 pub struct ParseRule {
-    prefix:  Option<ParseFn>, // Option<Box<dyn FnMut(&mut Compiler, bool)>>,
-    infix:  Option<ParseFn>, // Option<Box<dyn FnMut(&mut Compiler, bool)>>,
+    prefix: Option<ParseFn>, // Option<Box<dyn FnMut(&mut Compiler, bool)>>,
+    infix: Option<ParseFn>,  // Option<Box<dyn FnMut(&mut Compiler, bool)>>,
     precedence: Precedence,
 }
 
@@ -234,7 +239,7 @@ impl ParseRule {
         Self {
             prefix: Some(p_fix),
             infix: Some(i_fix),
-            precedence: precedenc
+            precedence: precedenc,
         }
     }
 
@@ -242,7 +247,7 @@ impl ParseRule {
         Self {
             prefix: Some(p_fix),
             infix: None,
-            precedence: precedenc
+            precedence: precedenc,
         }
     }
 
@@ -250,7 +255,7 @@ impl ParseRule {
         Self {
             prefix: None,
             infix: Some(i_fix),
-            precedence: precedenc
+            precedence: precedenc,
         }
     }
 
@@ -258,7 +263,7 @@ impl ParseRule {
         Self {
             prefix: None,
             infix: None,
-            precedence: precedenc
+            precedence: precedenc,
         }
     }
 
@@ -266,33 +271,50 @@ impl ParseRule {
         Self {
             prefix: None,
             infix: None,
-            precedence: Precedence::None
+            precedence: Precedence::None,
         }
     }
 }
 
 static RULES: [ParseRule; 40] = {
     let default = ParseRule::default();
-    let mut  rules = [default; 40];
+    let mut rules = [default; 40];
 
-    rules[(Kind::LeftParen as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.grouping(), Precedence::None);
-    rules[(Kind::Minus as u8) as usize] = ParseRule::new(|compiler, _| compiler.unary(),  
-    |compiler, _ | compiler.binary(),     Precedence::Term);
-    rules[(Kind::Plus as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.unary(),  Precedence::Term);
-    rules[(Kind::Slash as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Factor);
-    rules[(Kind::Star as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Factor);
-    rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.number(),  Precedence::Factor);
-    rules[(Kind::False as u8) as usize] = ParseRule::new_prefix(|compiler, _|  compiler.literal(),  Precedence::None);
-    rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
-    rules[(Kind::Number as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.literal(),  Precedence::None);
-    rules[(Kind::Bang as u8) as usize] = ParseRule::new_prefix(|compiler, _| compiler.unary(),  Precedence::None);
-    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Equality);
-    rules[(Kind::EqualEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Equality);
-    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] = ParseRule::new_infix(|compiler, _| compiler.binary(),  Precedence::Comparison);
-
+    rules[(Kind::LeftParen as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.grouping(), Precedence::None);
+    rules[(Kind::Minus as u8) as usize] = ParseRule::new(
+        |compiler, _| compiler.unary(),
+        |compiler, _| compiler.binary(),
+        Precedence::Term,
+    );
+    rules[(Kind::Plus as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.unary(), Precedence::Term);
+    rules[(Kind::Slash as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
+    rules[(Kind::Star as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
+    rules[(Kind::Number as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.number(), Precedence::Factor);
+    rules[(Kind::False as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+    rules[(Kind::Number as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+    rules[(Kind::Number as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+    rules[(Kind::Bang as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.unary(), Precedence::None);
+    rules[(Kind::BangEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Equality);
+    rules[(Kind::EqualEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Equality);
+    rules[(Kind::BangEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
+    rules[(Kind::BangEquals as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
 
     rules
 };
