@@ -51,28 +51,28 @@ impl<'src> Scanner<'src> {
             '*' => self.make_token(Kind::Star),
             '/' => self.make_token(Kind::Slash),
             '!' => {
-                if self.match_char('=') {
+                if self.match_next_char('=') {
                     self.make_token(Kind::BangEquals)
                 } else {
-                    self.make_token(Kind::Equal)
+                    self.make_token(Kind::Bang)
                 }
             }
             '=' => {
-                if self.match_char('=') {
+                if self.match_next_char('=') {
                     self.make_token(Kind::EqualEquals)
                 } else {
                     self.make_token(Kind::Equal)
                 }
             }
             '<' => {
-                if self.match_char('=') {
+                if self.match_next_char('=') {
                     self.make_token(Kind::LessEqual)
                 } else {
                     self.make_token(Kind::Less)
                 }
             }
             '>' => {
-                if self.match_char('=') {
+                if self.match_next_char('=') {
                     self.make_token(Kind::GreaterEqual)
                 } else {
                     self.make_token(Kind::Greater)
@@ -164,10 +164,10 @@ impl<'src> Scanner<'src> {
         self.make_token(Kind::Number)
     }
 
-    fn match_char(&mut self, expect: char) -> bool {
+    fn match_next_char(&mut self, expect: char) -> bool {
         if self.is_at_end() {
             false
-        } else if expect == (self.source.as_bytes()[self.current] as char) {
+        } else if expect != (self.source.as_bytes()[self.current] as char) {
             false
         } else {
             self.current += 1;

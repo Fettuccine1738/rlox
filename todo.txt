@@ -8,3 +8,5 @@ to save space storing line number of byte_code and their operands.
 Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 
 - support string interpolation.
+
+- todo rename ambigous match_char in scanner to next_match_char
