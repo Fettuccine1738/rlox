@@ -25,7 +25,7 @@ impl<'src> Scanner<'src> {
         self.start = self.current;
 
         if self.is_at_end() {
-            self.make_token(Kind::EOF);
+            return Some(self.make_token(Kind::EOF));
         }
 
         let ch: char = self.advance();

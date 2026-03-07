@@ -33,7 +33,7 @@ impl Compiler<'_> {
         compiler.consume(Kind::EOF, "Expected end of expression.");
         compiler.end_compilation();
 
-        compiler.parser.had_error
+        !compiler.parser.had_error
     }
 
     fn consume(&mut self, kind: Kind, err_msg: &'static str) {
@@ -97,8 +97,9 @@ impl Compiler<'_> {
 
     fn unary(&mut self) {
         let operator: Kind = self.parser.previous.kind;
+        // compile the operand
         self.parse_precedence(Precedence::Unary);
-        self.expression(); // compile the operand
+
         // emit the operator instruction
         // NOTE: unary operator is emitted after its operand (expr) because our vm
         // is stack based. we negate what is on the stack.
@@ -116,7 +117,7 @@ impl Compiler<'_> {
     fn binary(&mut self) {
         let operator: Kind = self.parser.previous.kind;
         let rule: &ParseRule = Self::get_parse_rule(operator);
-        self.parse_precedence(Precedence::try_from(rule.precedence as u8 + 1).unwrap());
+        self.parse_precedence(Precedence::try_from(rule.precedence as u8 + 1).unwrap()); // tries to parse rhs with a higher precedence.
 
         match operator {
             Kind::Plus => self.emit_byte(OpCode::Add as u8),
@@ -150,9 +151,9 @@ impl Compiler<'_> {
         if let Some(prefix) = Self::get_parse_rule(self.parser.previous.kind).prefix {
             prefix(self, false);
 
-            while (precedence as u8)
-                < (Self::get_parse_rule(self.parser.current.kind).precedence as u8)
-            {
+            let dbg_prec = precedence as u8;
+
+            while dbg_prec <= (Self::get_parse_rule(self.parser.current.kind).precedence as u8) {
                 self.parser.advance();
                 let infix: ParseFn = Self::get_parse_rule(self.parser.previous.kind)
                     .infix
@@ -160,8 +161,7 @@ impl Compiler<'_> {
                 infix(self, false);
             }
         } else {
-            // self.error("Expect expression.");
-            todo!()
+            self.parser.error("expected an expression here.");
         }
     }
 
@@ -186,15 +186,15 @@ impl Compiler<'_> {
 #[repr(u8)]
 pub enum Precedence {
     None = 0,
-    Assignment, // =
-    Or,         // or
-    And,        // and
-    Equality,   // ==, !=
-    Comparison, // <> <= >=
-    Term,       // + -
-    Factor,     // * /
-    Unary,      // ! -
-    Call,       // . ()
+    Assignment=1, // =
+    Or=2,         // or
+    And=3,        // and
+    Equality=4,   // ==, !=
+    Comparison=5, // <> <= >=
+    Term=6,       // + -
+    Factor=7,     // * /
+    Unary=8,      // ! -
+    Call=9,       // . ()
     Primary = 10,
 }
 
@@ -293,7 +293,11 @@ static RULES: [ParseRule; 40] = {
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
     rules[(Kind::Star as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
+    rules[(Kind::True as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
     rules[(Kind::False as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+    rules[(Kind::Nil as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
     rules[(Kind::Number as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
@@ -309,6 +313,8 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::LessEqual as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
     rules[(Kind::Less as u8) as usize] =
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
+    rules[(Kind::Greater as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
 
     rules

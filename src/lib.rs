@@ -14,7 +14,7 @@ pub mod test {
     pub(super) fn tests_compilation() {
         let source = "!(5 - 4 > 3 * 2 == !nil)";
         let mut vm = vm::VM::new();
-        let result = vm.interpret(source.to_owned());
+        let result = vm.compile(source.to_owned());
         assert_eq!(result, InterpretResult::Ok);
     }
 
@@ -23,7 +23,7 @@ pub mod test {
         let source = "1 +";
         let mut vm = vm::VM::new();
         assert_eq!(
-            vm.interpret(source.to_owned()),
+            vm.compile(source.to_owned()),
             InterpretResult::CompileError
         )
     }
@@ -33,7 +33,7 @@ pub mod test {
         let source = "1 + nil";
         let mut vm = vm::VM::new();
         assert_eq!(
-            vm.interpret(source.to_owned()),
+            vm.compile(source.to_owned()),
             InterpretResult::RuntimeError
         )
     }

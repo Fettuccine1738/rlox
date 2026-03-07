@@ -41,15 +41,19 @@ impl VM {
         self.stack.clear();
     }
 
+    pub fn compile(&mut self, source: String) -> InterpretResult {
+        let mut chunk: Chunk = Chunk::new();
+        if !Compiler::compile(&source, &mut chunk) {
+            InterpretResult::CompileError
+        } else { InterpretResult::Ok }
+    }
+
     pub fn interpret(&mut self, source: String) -> InterpretResult {
         let mut chunk: Chunk = Chunk::new();
         if !Compiler::compile(&source, &mut chunk) {
             drop(chunk);
             return InterpretResult::CompileError;
         }
-
-        // self.ip  = chunk.code;
-        // self.chunk = Some(chunk);
         self.run(&chunk)
     }
 
