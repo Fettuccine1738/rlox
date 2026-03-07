@@ -273,6 +273,8 @@ impl ParseRule {
     }
 }
 
+// The Pratt Parser decides how much of the expression to consume when parsing the right-hand side (RHS)
+// of a binary operator.
 static RULES: [ParseRule; 40] = {
     let default = ParseRule::default();
     let mut rules = [default; 40];
@@ -284,33 +286,29 @@ static RULES: [ParseRule; 40] = {
         |compiler, _| compiler.binary(),
         Precedence::Term,
     );
+
     rules[(Kind::Plus as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.unary(), Precedence::Term);
     rules[(Kind::Slash as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
     rules[(Kind::Star as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
-    rules[(Kind::Number as u8) as usize] =
-        ParseRule::new_prefix(|compiler, _| compiler.number(), Precedence::Factor);
     rules[(Kind::False as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
     rules[(Kind::Number as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
-    rules[(Kind::Number as u8) as usize] =
-        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+
     rules[(Kind::Bang as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.unary(), Precedence::None);
     rules[(Kind::BangEquals as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Equality);
     rules[(Kind::EqualEquals as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Equality);
-    rules[(Kind::BangEquals as u8) as usize] =
+    rules[(Kind::GreaterEqual as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] =
+    rules[(Kind::LessEqual as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] =
-        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
-    rules[(Kind::BangEquals as u8) as usize] =
+    rules[(Kind::Less as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
 
     rules
