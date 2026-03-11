@@ -3,6 +3,7 @@ pub mod compiler;
 pub mod lox_errors;
 pub mod value;
 pub mod vm;
+pub mod object;
 
 #[cfg(test)]
 pub mod test {

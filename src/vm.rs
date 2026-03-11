@@ -5,6 +5,7 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::lox_errors::VmError;
+use crate::value::HeapAllocatedObj;
 use crate::value::Value;
 
 pub const DEBUG_TRACE: bool = true;
@@ -67,7 +68,7 @@ impl VM {
     }
 
     fn peek(&mut self, distance: usize) -> Value {
-        self.stack[self.stack.len() - 1 - distance]
+        self.stack[self.stack.len() - 1 - distance].clone()
     }
 
     fn run(&mut self, chunk: &Chunk) -> InterpretResult {
@@ -89,13 +90,13 @@ impl VM {
                 }
                 OpCode::Constant => {
                     let constant: Value = self.read_constant(chunk, false);
-                    self.stack.push(constant); // self.push_value(constant)
                     println!("{:?}", constant);
+                    self.stack.push(constant); // self.push_value(constant)
                 }
                 OpCode::Constant24 => {
                     let constant: Value = self.read_constant(chunk, true);
-                    self.stack.push(constant);
                     println!("{:?}", constant);
+                    self.stack.push(constant);
                 }
                 OpCode::Negate => {
                     if !Value::is_number(&self.stack[self.stack.len() - 1]) {
@@ -109,7 +110,8 @@ impl VM {
                 OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
-                    let result = Self::binary_op(lhs, rhs, instruction);
+                    let result = Self::binary_op(lhs, rhs, instruction)
+                    .ok_or(InterpretResult::RuntimeError);
                     self.stack.push(result.unwrap());
                 }
                 OpCode::NIL => {
@@ -141,6 +143,10 @@ impl VM {
             (Value::Boolean(av), Value::Boolean(bv)) => av == bv,
             (Value::Nil, Value::Nil) => true,
             (Value::Number(av), Value::Number(bv)) => av == bv,
+            (Value::Object(av), Value::Object(bv)) => match (av.as_ref(), bv.as_ref()) {
+                (HeapAllocatedObj::String(a), HeapAllocatedObj::String(b)) => a == b,
+                _ => false
+            },
             _ => false,
         }
     }
@@ -171,10 +177,10 @@ impl VM {
             self.read_byte(chunk) as u32
         };
 
-        *chunk
+        chunk
             .constants
             .get(index as usize)
-            .expect("Invalid constant index.")
+            .expect("Invalid constant index.").clone()
     }
 
     fn read_byte(&mut self, chunk: &Chunk) -> u8 {
