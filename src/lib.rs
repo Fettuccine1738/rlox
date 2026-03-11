@@ -6,7 +6,16 @@ pub mod vm;
 
 #[cfg(test)]
 pub mod test {
-    use crate::vm::{self, InterpretResult};
+    use crate::{compiler::Compiler, vm::{self, InterpretResult}, chunk::Chunk};
+
+    // Not a real test, just to walk through the implementation so far.
+    #[test]
+    pub(super) fn tests_simple_arithmetic_op() {
+        let source = "5 - 4";
+        let mut ch: Chunk = Chunk::new();
+        let success: bool = Compiler::compile(source, &mut ch);
+        assert!(success);
+    }
 
     // tests end-end process from, scanning/parsing to
     // compiling and interpreting.

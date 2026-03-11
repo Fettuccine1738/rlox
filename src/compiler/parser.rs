@@ -42,8 +42,12 @@ impl<'src> Parser<'src> {
 
     pub fn consume(&mut self, kind: Kind, msg: &'static str) {
         if self.current.kind == kind {
-            self.advance();
-            return;
+            if kind == Kind::EOF {
+                return;
+            } else {
+                self.advance();
+                return;
+            }
         }
         self.error_at_current(msg);
     }

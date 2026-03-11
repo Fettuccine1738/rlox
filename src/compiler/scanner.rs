@@ -131,32 +131,38 @@ impl<'src> Scanner<'src> {
         }
     }
 
-    fn check_keyword(
-        &mut self,
-        start: usize,
-        length: usize,
-        rest: &'static str,
-        kind: Kind,
-    ) -> Kind {
-        if self.current - self.start == start + length
-            && &self.source[self.start + start..self.start + start + length] == rest
-        {
-            return kind;
-        }
-        Kind::Identifier
-    }
+    // fn check_keyword(
+    //     &mut self,
+    //     start: usize,
+    //     length: usize,
+    //     rest: &'static str,
+    //     kind: Kind,
+    // ) -> Kind {
+    //     if self.current - self.start == start + length
+    //         && &self.source[self.start + start..self.start + start + length] == rest
+    //     {
+    //         return kind;
+    //     }
+    //     Kind::Identifier
+    // }
 
     fn number(&mut self) -> Token<'src> {
-        while self.peek().unwrap().is_digit(10) {
-            self.advance();
+        while let Some(ch) = self.peek() {
+            if ch.is_digit(10) {
+                self.advance();
+            } else {
+                break;
+            }
         }
 
         if let Some('.') = self.peek() {
             let nxt = self.source.as_bytes()[self.current + 1] as char;
             if nxt.is_digit(10) {
                 self.advance(); // consume '.'
-                while self.peek().unwrap().is_digit(10) {
-                    self.advance();
+                while let Some(ch) = self.peek() {
+                    if ch.is_digit(10) {
+                        self.advance();
+                    }
                 }
             }
         }

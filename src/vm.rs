@@ -10,6 +10,7 @@ use crate::value::Value;
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
 
+// PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
 pub enum InterpretResult {
