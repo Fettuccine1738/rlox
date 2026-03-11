@@ -4,7 +4,7 @@ use crate::compiler::token::Token;
 // a Scanner struct must not outlive the source string it points to.
 #[derive(Debug)]
 pub struct Scanner<'src> {
-    source: &'src str,
+    pub source: &'src str,
     start: usize,
     current: usize,
     line: u32,

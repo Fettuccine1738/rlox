@@ -3,7 +3,6 @@ pub mod compiler;
 pub mod lox_errors;
 pub mod value;
 pub mod vm;
-pub mod object;
 
 #[cfg(test)]
 pub mod test {
@@ -46,5 +45,11 @@ pub mod test {
             vm.compile(source.to_owned()),
             InterpretResult::RuntimeError
         )
+    }
+
+    #[test]
+    fn tests_string_concatenation() {
+        let mut ch: Chunk = Chunk::new();
+        assert!(Compiler::compile("\"st\" +   \"ri\" + \"ing\"", &mut ch));
     }
 }

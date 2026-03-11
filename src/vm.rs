@@ -1,3 +1,5 @@
+use core::panic;
+use std::collections::LinkedList;
 use std::ops::{Add, Div, Mul, Sub};
 
 //------------Virtual-machine
@@ -24,6 +26,9 @@ pub struct VM {
     // chunk: Option<Chunk>,
     ip: usize, // instruction pointer: book uses uint8_t*
     stack: Vec<Value>,
+    // for gc ..
+    // Box::automatically deallocates objects on the heap.
+    // objects: LinkedList<Value>
 }
 
 impl VM {
@@ -124,37 +129,26 @@ impl VM {
                     self.stack.push(Value::Boolean(false));
                 }
                 OpCode::Not => {
-                    let value: bool = Self::is_falsey(self.stack.pop().unwrap());
+                    let value: bool = if let Some(v) = self.stack.pop() {
+                        v.is_falsey()
+                    } else {
+                        // TODO: handle this error
+                        panic!()
+                    };
                     self.stack.push(Value::Boolean(value));
                 }
                 OpCode::Equal => {
-                    let a = self.stack.pop();
-                    let b = self.stack.pop();
-                    let c = Self::values_equal(a.unwrap(), b.unwrap());
-                    self.stack.push(Value::Boolean(c));
+                    let p = self.stack.pop();
+                    let q = self.stack.pop();
+                    let eq = match (p, q) {
+                        (Some(a), Some(b)) => Value::values_equal(a, b),
+                        _ => panic!("expected two operands to binary op == ")
+                    };
+                    self.stack.push(Value::Boolean(eq));
                 }
                 _ => todo!(),
             }
         }
-    }
-
-    fn values_equal(a: Value, b: Value) -> bool {
-        match (a, b) {
-            (Value::Boolean(av), Value::Boolean(bv)) => av == bv,
-            (Value::Nil, Value::Nil) => true,
-            (Value::Number(av), Value::Number(bv)) => av == bv,
-            (Value::Object(av), Value::Object(bv)) => match (av.as_ref(), bv.as_ref()) {
-                (HeapAllocatedObj::String(a), HeapAllocatedObj::String(b)) => a == b,
-                _ => false
-            },
-            _ => false,
-        }
-    }
-
-    // falsiness handles how other types are negated('not'ed)
-    // e.g !nil, !"string"
-    fn is_falsey(value: Value) -> bool {
-        Value::is_nil(&value) || (Value::is_bool(&value) && !Value::as_bool(&value))
     }
 
     fn runtime_error(vm: &mut VM, chunk: &Chunk, msg: &'static str) {
@@ -195,7 +189,7 @@ impl VM {
             OpCode::Divide => lhs.div(rhs),
             OpCode::Multiply => lhs.mul(rhs),
             OpCode::Subtract => lhs.sub(rhs),
-            _ => panic!(),
+            _ => None,
         }
     }
 }

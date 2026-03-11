@@ -143,6 +143,13 @@ impl Compiler<'_> {
         }
     }
 
+    fn string(&mut self) {
+        // trim off "" from both ends
+        let lexeme = self.parser.previous.lexeme;
+        let trimmed_lexeme = (&lexeme[1..lexeme.len() - 1]).to_owned();
+        self.emit_constant(Value::new_string_obj(trimmed_lexeme));
+    }
+
     /// calls using precedence ensures only operators have higher precedence are executed.
     /// e.g -a.b + c :: without precedence levels becomes -(a.b + c). Precedence correctly
     /// parses it as (-a.b) + c because Precedenc::Unary > Term.  
@@ -316,6 +323,8 @@ static RULES: [ParseRule; 40] = {
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
     rules[(Kind::Greater as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
+    rules[(Kind::String as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.string(), Precedence::None);
 
     rules
 };

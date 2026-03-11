@@ -1,7 +1,8 @@
 use std::{
-    fmt::Display,
+    fmt::{Display, write},
     ops::{Add, Div, Mul, Neg, Sub},
 };
+
 
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
@@ -59,10 +60,30 @@ impl Value {
         }
     }
 
-    pub fn new_string(s: String) -> Self {
+    pub fn new_string_obj(s: String) -> Self {
         Value::Object(Box::new(HeapAllocatedObj::String(s)))
     }
+
+    pub fn values_equal(a: Value, b: Value) -> bool {
+        match (a, b) {
+            (Value::Boolean(av), Value::Boolean(bv)) => av == bv,
+            (Value::Nil, Value::Nil) => true,
+            (Value::Number(av), Value::Number(bv)) => av == bv,
+            (Value::Object(av), Value::Object(bv)) => match (av.as_ref(), bv.as_ref()) {
+                (HeapAllocatedObj::String(a), HeapAllocatedObj::String(b)) => a == b,
+                // _ => false
+            },
+            _ => false,
+        }
+    }
+
+    // falsiness handles how other types are negated('not'ed)
+    // e.g !nil, !"string"
+    pub fn is_falsey(&self) -> bool {
+        Value::is_nil(self) || (Value::is_bool(self) && !Value::as_bool(self))
+    }
 }
+
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -70,7 +91,7 @@ impl Display for Value {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Nil => write!(f, "{}", *self),
-            _ => todo!()
+            Value::Object(o) => write!(f, "{}", o), 
         }
     }
 }
@@ -84,7 +105,7 @@ impl Neg for Value {
             Value::Boolean(_) => None,
             Value::Number(n) => Some(Value::Number(-n)),
             Value::Nil => Some(Value::Nil),
-            _ => todo!()
+            _ => None
         }
     }
 }
@@ -99,7 +120,7 @@ impl Add for Value {
             if l.is_string() && r.is_string() => {
                 let mut concat = l.as_string().unwrap().to_owned();
                 concat.push_str(r.as_string().unwrap());
-                Some(Value::new_string(concat))
+                Some(Value::new_string_obj(concat))
             }
             _ => None,
         }
@@ -152,15 +173,24 @@ impl HeapAllocatedObj {
         matches!(self, Self::String(_))
     }
 
-    pub fn is_obj_type(value: &Value, typ: HeapAllocatedObj) -> bool {
-        todo!()
-    }
+    // pub fn is_obj_type(value: &Value, typ: HeapAllocatedObj) -> bool {
+    //     todo!()
+    // }
 
     pub fn as_string(&self) -> Option<&str> {
         if let HeapAllocatedObj::String(s) = self {
             Some(s)
         } else {
             None
+        }
+    }
+}
+
+impl Display for HeapAllocatedObj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            Self::String(b) => write!(f, "{}", b),
+            // _ => todo!()
         }
     }
 }
