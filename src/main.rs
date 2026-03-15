@@ -1,29 +1,8 @@
 use std::fs;
 use std::io;
 
-use rlox::chunk::Chunk;
-use rlox::chunk::*;
-use rlox::value::Value;
 use rlox::vm::InterpretResult;
-
-// TODO: transfer to test module.
-fn sample_chunk() {
-    // let virtual_machine = VM::init();
-    let mut ch: Chunk = Chunk::new();
-    // let idx = ch.add_constant(1.2);
-    // ch.write_chunk(OpCode::Return, 1);
-    ch.write_constant(Value::Number(42.01), 2);
-    ch.write_constant(Value::Number(2.0), 2);
-    ch.write_chunk(OpCode::Add, 2);
-    ch.write_constant(Value::Number(1.0), 2);
-    ch.write_chunk(OpCode::Divide, 2);
-    ch.write_chunk(OpCode::Negate, 2);
-    ch.write_chunk(OpCode::Return, 2);
-
-    // dbg!(&ch);
-    Chunk::disassemble(&ch, "test bytes");
-    // virtual_machine.
-}
+use string_interner::StringInterner;
 
 pub fn repl() {
     // let stdin = std::io::stdin();
@@ -66,17 +45,34 @@ fn interpret(_input: &str) -> InterpretResult {
 }
 
 fn main() {
-    // reading from commandline arguments
-    let args: Vec<String> = std::env::args().skip(1).collect::<Vec<String>>();
-    let arg_count = args.len();
-    if arg_count == 1 {
-        repl();
-    } else if arg_count == 2 {
-        let _path = args[1].to_owned();
-        todo!()
-    } else {
-        eprintln!("Usage: rlox path[]");
-        std::process::exit(64);
+    // // reading from commandline arguments
+    // let args: Vec<String> = std::env::args().skip(1).collect::<Vec<String>>();
+    // let arg_count = args.len();
+    // if arg_count == 1 {
+    //     repl();
+    // } else if arg_count == 2 {
+    //     let _path = args[1].to_owned();
+    //     todo!()
+    // } else {
+    //     eprintln!("Usage: rlox path[]");
+    //     std::process::exit(64);
+    // }
+    use string_interner::StringInterner;
+
+    let mut interner = StringInterner::default();
+    let sym0 = interner.get_or_intern("Elephant");
+    let sym1 = interner.get_or_intern("Tiger");
+    let sym2 = interner.get_or_intern("Horse");
+    let sym3 = interner.get_or_intern("Tiger");
+    assert_ne!(sym0, sym1);
+    assert_ne!(sym0, sym2);
+    assert_ne!(sym1, sym2);
+    assert_eq!(sym1, sym3); // same!
+    use string_interner::DefaultStringInterner;
+    use string_interner::Symbol;
+
+    let interner = <DefaultStringInterner>::from_iter(["Earth", "Water", "Fire", "Air"]);
+    for (sym, str) in &interner {
+        println!("{} = {}", sym.to_usize(), str);
     }
-    println!("Hello, world!");
 }

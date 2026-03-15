@@ -2,19 +2,26 @@ use core::panic;
 use std::collections::LinkedList;
 use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
+use std::sync::{LazyLock, Mutex};
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
-use crate::data_structures::HashTable;
-use crate::lox_errors::VmError;
-use crate::value::HeapAllocatedObj;
+// use crate::lox_errors::VmError;
+// use crate::value::HeapAllocatedObj;
 use crate::value::Value;
+use string_interner::{symbol::SymbolU32, backend::StringBackend, StringInterner};
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
-pub const STRING_INTERNALS: HashTable = HashTable::new();
+static STRING_INTERNALS: LazyLock<Mutex<StringInterner<StringBackend>>> = LazyLock::new(|| Mutex::new(StringInterner::default()));
+// pub type StrId = SymbolU32;
+
+pub fn intern(string: &str) -> SymbolU32 {
+    let mut interner = STRING_INTERNALS.lock().unwrap();
+    return interner.get_or_intern(string);
+}
 
 // PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]

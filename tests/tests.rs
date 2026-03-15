@@ -1,8 +1,9 @@
 #[cfg(test)]
 pub mod test {
     use rlox::{
-        chunk::Chunk,
+        chunk::{Chunk, OpCode},
         compiler::Compiler,
+        value::Value,
         vm::{self, InterpretResult},
     };
 
@@ -43,5 +44,24 @@ pub mod test {
     fn tests_string_concatenation() {
         let mut ch: Chunk = Chunk::new();
         assert!(Compiler::compile("\"st\" +   \"ri\" + \"ing\"", &mut ch));
+    }
+
+    // TODO: transfer to test module.
+    fn sample_chunk() {
+        // let virtual_machine = VM::init();
+        let mut ch: Chunk = Chunk::new();
+        // let idx = ch.add_constant(1.2);
+        // ch.write_chunk(OpCode::Return, 1);
+        ch.write_constant(Value::Number(42.01), 2);
+        ch.write_constant(Value::Number(2.0), 2);
+        ch.write_chunk(OpCode::Add, 2);
+        ch.write_constant(Value::Number(1.0), 2);
+        ch.write_chunk(OpCode::Divide, 2);
+        ch.write_chunk(OpCode::Negate, 2);
+        ch.write_chunk(OpCode::Return, 2);
+
+        // dbg!(&ch);
+        Chunk::disassemble(&ch, "test bytes");
+        // virtual_machine.
     }
 }
