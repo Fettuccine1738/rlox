@@ -1,5 +1,6 @@
 use core::panic;
 use std::collections::LinkedList;
+use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 
 //------------Virtual-machine
@@ -9,9 +10,11 @@ use crate::compiler::Compiler;
 use crate::lox_errors::VmError;
 use crate::value::HeapAllocatedObj;
 use crate::value::Value;
+use crate::data_structures::HashTable;
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
+pub const STRING_INTERNALS: HashTable = HashTable::new();
 
 // PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
