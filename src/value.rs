@@ -3,7 +3,6 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
-
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
@@ -12,7 +11,7 @@ pub enum Value {
     Boolean(bool),
     Nil,
     Number(f64),
-    Object(Box<HeapAllocatedObj>)
+    Object(Box<HeapAllocatedObj>),
 }
 
 impl Value {
@@ -84,14 +83,13 @@ impl Value {
     }
 }
 
-
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Nil => write!(f, "{}", *self),
-            Value::Object(o) => write!(f, "{}", o), 
+            Value::Object(o) => write!(f, "{}", o),
         }
     }
 }
@@ -105,7 +103,7 @@ impl Neg for Value {
             Value::Boolean(_) => None,
             Value::Number(n) => Some(Value::Number(-n)),
             Value::Nil => Some(Value::Nil),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -116,8 +114,7 @@ impl Add for Value {
     fn add(self, other: Self) -> Self::Output {
         match (&self, &other) {
             (Value::Number(l), Value::Number(r)) => Some(Value::Number(l + r)),
-            (Value::Object(l), Value::Object(r)) 
-            if l.is_string() && r.is_string() => {
+            (Value::Object(l), Value::Object(r)) if l.is_string() && r.is_string() => {
                 let mut concat = l.as_string().unwrap().to_owned();
                 concat.push_str(r.as_string().unwrap());
                 Some(Value::new_string_obj(concat))
@@ -165,8 +162,8 @@ impl Sub for Value {
 pub enum HeapAllocatedObj {
     // RuntimeString(&'a str),
     // ConstString(&'a str),
-    String(String)
-} 
+    String(String),
+}
 
 impl HeapAllocatedObj {
     pub fn is_string(&self) -> bool {

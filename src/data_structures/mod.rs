@@ -1,5 +1,5 @@
-use std::{fmt::Debug, hash::Hash};
 use crate::value::Value;
+use std::{fmt::Debug, hash::Hash};
 
 // #[derive(Debug)]
 // pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
@@ -26,7 +26,7 @@ pub struct HashTable {
 #[derive(Debug)]
 struct Entry<K: Debug + Clone, V: Debug + Clone> {
     key: K,
-    value: V
+    value: V,
 }
 
 //--------------utils---------------------------
@@ -38,13 +38,12 @@ macro_rules! hash_str {
 }
 
 pub fn fnv1_hash(key: &str) -> u32 {
-    key.bytes().fold(2166136261u32, |hash, b| {
-        (hash ^ (b as u32)) * 16777619
-    })
+    key.bytes()
+        .fold(2166136261u32, |hash, b| (hash ^ (b as u32)) * 16777619)
 }
 
 pub struct Iter<'a> {
-    iter: std::iter::Flatten<std::slice::Iter<'a, Option<Entry<String, Value>>>>
+    iter: std::iter::Flatten<std::slice::Iter<'a, Option<Entry<String, Value>>>>,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -55,7 +54,7 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 pub struct IterMut<'a> {
-    iter: std::iter::Flatten<std::slice::IterMut<'a, Option<Entry<String, Value>>>>
+    iter: std::iter::Flatten<std::slice::IterMut<'a, Option<Entry<String, Value>>>>,
 }
 
 impl<'a> Iterator for IterMut<'a> {
@@ -68,15 +67,22 @@ impl<'a> Iterator for IterMut<'a> {
 
 impl HashTable {
     pub const fn new() -> Self {
-        Self { len: 0, entries: Vec::new()}
+        Self {
+            len: 0,
+            entries: Vec::new(),
+        }
     }
 
     pub fn iter(&mut self) -> Iter<'_> {
-        Iter { iter: self.entries.iter().flatten() }
+        Iter {
+            iter: self.entries.iter().flatten(),
+        }
     }
 
     pub fn iter_mut(&mut self) -> IterMut<'_> {
-        IterMut { iter: self.entries.iter_mut().flatten() }
+        IterMut {
+            iter: self.entries.iter_mut().flatten(),
+        }
     }
 
     fn find_entry_mut(&mut self, key: &str) -> &mut Option<Entry<String, Value>> {
@@ -97,21 +103,20 @@ impl HashTable {
             match &self.entries[index] {
                 Some(entry) if entry.key == *key => break, //return &mut self.entries[index],
                 None => break, //  return &mut self.entries[index], // stop probing
-                _ => index = (index + 1) % len, 
+                _ => index = (index + 1) % len,
             }
 
             // probe sequence.
             if index == start {
                 panic!("hashmap is full!.")
             }
-        };
+        }
         index
     }
 
-
     pub fn insert(&mut self, key: String, v: Value) -> bool {
         let entry = self.find_entry_mut(&key);
-        let prev =  std::mem::replace(entry, Some(Entry {key: key, value: v}));
+        let prev = std::mem::replace(entry, Some(Entry { key: key, value: v }));
         if prev.is_none() {
             self.len += 1;
             true
@@ -127,7 +132,7 @@ impl HashTable {
     pub fn add_all(&mut self, other: HashTable) {
         self.entries.reserve(other.entries.len());
         // if iterator and into_iter is not implemented.
-        // into_iter().flatten() is the correct approach. 
+        // into_iter().flatten() is the correct approach.
         for entry in other.into_iter() {
             self.insert(entry.key, entry.value);
         }
@@ -170,7 +175,7 @@ impl HashTable {
     }
 }
 
-// holds iterator state. 
+// holds iterator state.
 struct MyIntoIter {
     iter: std::vec::IntoIter<Option<Entry<String, Value>>>,
 }
@@ -182,16 +187,15 @@ impl Iterator for MyIntoIter {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iter.next() {
-                Some(Some(entry)) => return Some(entry), 
+                Some(Some(entry)) => return Some(entry),
                 Some(None) => continue, // empty slot
                 None => return None,
-            } 
+            }
         }
     }
 }
 
-
-// defines how to turn value into an iterator. 
+// defines how to turn value into an iterator.
 impl IntoIterator for HashTable {
     type Item = Entry<String, Value>;
 
@@ -199,8 +203,7 @@ impl IntoIterator for HashTable {
 
     fn into_iter(self) -> Self::IntoIter {
         MyIntoIter {
-            iter: self.entries.into_iter()
+            iter: self.entries.into_iter(),
         }
     }
-} 
-
+}

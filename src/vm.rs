@@ -7,10 +7,10 @@ use std::ops::{Add, Div, Mul, Sub};
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
+use crate::data_structures::HashTable;
 use crate::lox_errors::VmError;
 use crate::value::HeapAllocatedObj;
 use crate::value::Value;
-use crate::data_structures::HashTable;
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
@@ -55,7 +55,9 @@ impl VM {
         let mut chunk: Chunk = Chunk::new();
         if !Compiler::compile(&source, &mut chunk) {
             InterpretResult::CompileError
-        } else { InterpretResult::Ok }
+        } else {
+            InterpretResult::Ok
+        }
     }
 
     pub fn interpret(&mut self, source: String) -> InterpretResult {
@@ -118,8 +120,8 @@ impl VM {
                 OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
-                    let result = Self::binary_op(lhs, rhs, instruction)
-                    .ok_or(InterpretResult::RuntimeError);
+                    let result =
+                        Self::binary_op(lhs, rhs, instruction).ok_or(InterpretResult::RuntimeError);
                     self.stack.push(result.unwrap());
                 }
                 OpCode::NIL => {
@@ -145,7 +147,7 @@ impl VM {
                     let q = self.stack.pop();
                     let eq = match (p, q) {
                         (Some(a), Some(b)) => Value::values_equal(a, b),
-                        _ => panic!("expected two operands to binary op == ")
+                        _ => panic!("expected two operands to binary op == "),
                     };
                     self.stack.push(Value::Boolean(eq));
                 }
@@ -177,7 +179,8 @@ impl VM {
         chunk
             .constants
             .get(index as usize)
-            .expect("Invalid constant index.").clone()
+            .expect("Invalid constant index.")
+            .clone()
     }
 
     fn read_byte(&mut self, chunk: &Chunk) -> u8 {
