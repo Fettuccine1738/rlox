@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod test {
-    use crate::{
+    use rlox::{
         chunk::Chunk,
         compiler::Compiler,
         vm::{self, InterpretResult},

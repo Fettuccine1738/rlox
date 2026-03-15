@@ -24,7 +24,7 @@ pub struct HashTable {
 }
 
 #[derive(Debug)]
-struct Entry<K: Debug + Clone, V: Debug + Clone> {
+pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
     key: K,
     value: V,
 }
@@ -176,7 +176,7 @@ impl HashTable {
 }
 
 // holds iterator state.
-struct MyIntoIter {
+pub struct MyIntoIter {
     iter: std::vec::IntoIter<Option<Entry<String, Value>>>,
 }
 

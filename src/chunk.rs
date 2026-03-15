@@ -137,7 +137,7 @@ impl Chunk {
             OpCode::Constant24 => {
                 // 24 bit operand.
                 let index = chunk.read_long_constant(offset);
-                let constant = chunk.constants[index];
+                let constant = &chunk.constants[index];
                 println!("  OP_CONSTANT_LONG\t{}\t{constant}", index);
                 offset + 4 // consume op_code_long, byte, byte, byte 
             } // _ => panic!()
