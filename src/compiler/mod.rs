@@ -29,15 +29,32 @@ impl Compiler<'_> {
             chunk: chunk,
         };
         compiler.parser.advance();
-        compiler.expression();
-        compiler.consume(Kind::EOF, "Expected end of expression.");
-        compiler.end_compilation();
 
+        while !compiler.match_token(Kind::EOF) {
+            compiler.declaration();
+        } 
+        // compiler.expression();
+        // compiler.consume(Kind::EOF, "Expected end of expression.");
+
+        compiler.end_compilation();
         !compiler.parser.had_error
     }
 
     fn consume(&mut self, kind: Kind, err_msg: &'static str) {
         self.parser.consume(kind, err_msg);
+    }
+
+    fn match_token(&mut self, kind: Kind) -> bool {
+        if !self.check(kind) {
+            false 
+        } else {
+            self.parser.advance();
+            true
+        }
+    }
+
+    fn check(&mut self, kind: Kind) -> bool {
+        self.parser.current.kind == kind
     }
 
     fn emit_return(&mut self) {
@@ -47,6 +64,8 @@ impl Compiler<'_> {
     fn emit_op_code_byte(&mut self, op_code: OpCode) {
         self.emit_byte(op_code as u8);
     }
+
+
     // byte may be opcode or operand
     fn emit_byte(&mut self, byte: u8) {
         self.chunk.write(byte, self.parser.previous.line);
@@ -81,6 +100,22 @@ impl Compiler<'_> {
 
     fn current_chunk(&self) -> &Chunk {
         self.chunk
+    }
+
+    fn declaration(&mut self) {
+        self.statement();
+    }
+
+    fn statement(&mut self) {
+        if self.match_token(Kind::Print) {
+            self.print_statement();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        self.expression(); // evaluates expression to print sstatement.
+        self.consume(Kind::SemiColon, "Expect ';' after value.");
+        self.emit_op_code_byte(OpCode::Print);
     }
 
     fn number(&mut self) {

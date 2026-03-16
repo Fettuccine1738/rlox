@@ -21,6 +21,7 @@ pub enum OpCode {
     Equal = 12,
     Greater = 13,
     Less = 14,
+    Print = 15,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -156,11 +157,9 @@ impl Chunk {
             }
             OpCode::Equal => Self::simple_instruction("OP_EQUAL", offset),
             OpCode::Greater => Self::simple_instruction("OP_GREATER", offset),
-            OpCode::Less => Self::simple_instruction("OP_LESS", offset), // _ => {
-                                                                         //     println!("Unknown opcode {}", instruction);
-                                                                         //     offset + 1
-                                                                         //  },
-        }
+            OpCode::Less => Self::simple_instruction("OP_LESS", offset),  
+            OpCode::Print => Self::simple_instruction("OP_PRINT", offset),
+            }
     }
 
     fn simple_instruction(name: &str, offset: usize) -> usize {

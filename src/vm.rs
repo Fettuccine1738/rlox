@@ -1,6 +1,4 @@
 use core::panic;
-use std::collections::LinkedList;
-use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 use std::sync::{LazyLock, Mutex};
 
@@ -11,16 +9,22 @@ use crate::compiler::Compiler;
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;
 use crate::value::Value;
-use string_interner::{symbol::SymbolU32, backend::StringBackend, StringInterner};
+use string_interner::{symbol::{SymbolU32, Symbol}, backend::StringBackend, StringInterner};
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
-static STRING_INTERNALS: LazyLock<Mutex<StringInterner<StringBackend>>> = LazyLock::new(|| Mutex::new(StringInterner::default()));
-// pub type StrId = SymbolU32;
+
+type Interner = LazyLock<Mutex<StringInterner<StringBackend>>>;
+static STRING_INTERNALS: Interner = LazyLock::new(|| Mutex::new(StringInterner::default()));
 
 pub fn intern(string: &str) -> SymbolU32 {
     let mut interner = STRING_INTERNALS.lock().unwrap();
     return interner.get_or_intern(string);
+}
+
+pub fn find_string(string: &str) -> usize {
+    let mut interner = STRING_INTERNALS.lock().unwrap();
+    return interner.get_or_intern(string).to_usize();
 }
 
 // PartialEq is derived, to allow assertions on the variants.
@@ -99,12 +103,12 @@ impl VM {
             let instruction: OpCode = OpCode::try_from(self.read_byte(chunk)).expect("");
 
             match instruction {
-                OpCode::Return => {
-                    if let Some(v) = self.stack.pop() {
-                        println!("{}", v);
-                    }
-                    return InterpretResult::Ok;
-                }
+                // OpCode::Return => {
+                //     if let Some(v) = self.stack.pop() {
+                //         println!("{}", v);
+                //     }
+                //     return InterpretResult::Ok;
+                // }
                 OpCode::Constant => {
                     let constant: Value = self.read_constant(chunk, false);
                     println!("{:?}", constant);
@@ -157,6 +161,10 @@ impl VM {
                         _ => panic!("expected two operands to binary op == "),
                     };
                     self.stack.push(Value::Boolean(eq));
+                }
+                OpCode::Print => {
+                    let value = self.stack.pop();
+                    println!("{:?}", value);
                 }
                 _ => todo!(),
             }

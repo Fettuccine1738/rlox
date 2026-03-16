@@ -64,6 +64,7 @@ fn main() {
     let sym1 = interner.get_or_intern("Tiger");
     let sym2 = interner.get_or_intern("Horse");
     let sym3 = interner.get_or_intern("Tiger");
+    println!("{:?}", sym0);
     assert_ne!(sym0, sym1);
     assert_ne!(sym0, sym2);
     assert_ne!(sym1, sym2);
