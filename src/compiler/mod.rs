@@ -11,7 +11,7 @@ use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::value::Value;
 use crate::compiler::token::Token;
-use crate::data_structures::string_interner::{self};
+use crate::data_structures::interner::{self};
 
 #[derive(Debug)]
 pub struct Compiler<'a> {
@@ -276,7 +276,7 @@ impl Compiler<'_> {
 
     // code smell: Does this really need to be an associated func?? 
     fn identifier_constant(&mut self, token: Token) -> OpCode {
-        let symbol: SymbolU32 = string_interner::intern(token.lexeme);
+        let symbol: SymbolU32 = interner::intern(token.lexeme);
         Self::make_constant(Value::String(symbol), self.chunk)
     }
 

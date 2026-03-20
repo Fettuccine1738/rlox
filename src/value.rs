@@ -5,6 +5,8 @@ use std::{
 
 use string_interner::symbol::SymbolU32;
 
+use crate::data_structures::interner::{self};
+
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
@@ -120,12 +122,16 @@ impl Add for Value {
                 Some(Value::new_string_obj(concat))
             },
             (Value::String(lhs), Value::String(rhs)) => {
-                todo!()
-                // let l_str = VM::get_interned_strings(lhs).unwrap();
-                // let r_str = VM::get_interned_strings(rhs).unwrap();
-                // let concat = VM::get_or_intern(l_str.push_str(&r_str));
-                // // borrow the interned String?? 
-                // Some(Value::String(concat))
+                let l_str = interner::get_string(*lhs);
+                let r_str = interner::get_string(*rhs);
+                match (l_str, r_str) {
+                    (Some(mut l), Some(r)) => {
+                        l.push_str(&r);
+                        let symbol = interner::intern(&l);
+                        Some(Value::String(symbol))
+                    } 
+                    _ => None,
+                }
             }
             _ => None,
         }

@@ -1,4 +1,4 @@
-pub mod string_interner;
+pub mod interner;
 
 use crate::value::Value;
 use std::{fmt::Debug, hash::Hash};

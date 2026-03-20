@@ -7,7 +7,7 @@ use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::data_structures::HashTable;
 use crate::value::Value;
-use crate::data_structures::string_interner::{self};
+use crate::data_structures::interner::{self};
 
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;
@@ -140,8 +140,7 @@ impl VM {
                     let value: bool = if let Some(v) = self.stack.pop() {
                         v.is_falsey()
                     } else {
-                        // TODO: handle this error
-                        panic!()
+                        return InterpretResult::RuntimeError;
                     };
                     self.stack.push(Value::Boolean(value));
                 }
@@ -235,7 +234,7 @@ impl VM {
         // so we know to read either the next byte or next 3 bytes.
         // This is a pending workaround until a solution is found.
         match self.read_constant(chunk, false) {
-            Value::String(symbol) => string_interner::get_string(symbol),
+            Value::String(symbol) => interner::get_string(symbol),
             _ => None,
         }
     }
