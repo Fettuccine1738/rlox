@@ -2,8 +2,6 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
-
-use ::string_interner::Symbol;
 use ::string_interner::symbol::SymbolU32;
 
 use self::parser::Parser;
@@ -279,7 +277,7 @@ impl Compiler<'_> {
     // code smell: Does this really need to be an associated func?? 
     fn identifier_constant(&mut self, token: Token) -> OpCode {
         let symbol: SymbolU32 = string_interner::intern(token.lexeme);
-        Self::make_constant(Value::String(symbol.to_usize()), self.chunk)
+        Self::make_constant(Value::String(symbol), self.chunk)
     }
 
     /// ---------associated functions------------------

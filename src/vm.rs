@@ -15,7 +15,6 @@ use crate::data_structures::string_interner::{self};
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
 
-static VM_GLOBALS: HashTable = HashTable::new();
 
 // PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
@@ -30,6 +29,7 @@ pub struct VM {
     // chunk: Option<Chunk>,
     ip: usize, // instruction pointer: book uses uint8_t*
     stack: Vec<Value>,
+    globals: HashTable,
     // for gc ..
     // Box::automatically deallocates objects on the heap.
     // objects: LinkedList<Value>
@@ -45,6 +45,7 @@ impl VM {
             // chunk: None, // we don't always start out with valid chunks
             ip: 0usize,
             stack: Vec::with_capacity(STACK_MAX),
+            globals: HashTable::new()
         }
     }
 
@@ -164,15 +165,17 @@ impl VM {
                 }
                 OpCode::DefinedGlobal => { 
                     // used to strore the global Variable and Value pairs.
-                    let name: String = todo!();
+                    let name: String = self.read_string(chunk).unwrap();
                     // NOTE: Value is not popped directly off the stack.
                     // This is to ensure that the VM can still find the value after/during garbage collection.b
-                    VM_GLOBALS.insert(name, self.peek(0));
+                    let value = self.peek(0);
+                    self.globals.insert(name, value);
                     self.stack.pop(); // discard
                 }
                 OpCode::GetGlobal => {
-                    let name: String = todo!();
-                    let value: Value = match VM_GLOBALS.get(name) {
+                    let name: String = self.read_string(chunk).unwrap();
+                    // here is the actual value associated with this variable name.
+                    let value: Value = match self.globals.get(&name) {
                         Some(value) => value,
                         None => return InterpretResult::RuntimeError
                     };
@@ -226,12 +229,13 @@ impl VM {
         }
     }
 
-    fn read_string(&mut self) -> Option<String> {
-        let constant: Value = self.read_constant(chunk, is_long); 
-        match constant {
-            Value::String(index) => {
-                return string_interner::get_string(index);
-            },
+    fn read_string(&mut self, chunk: &Chunk) -> Option<String> {
+        // HACK + TODO: Because we have 2 constant-indexing Operands OpConstant and OpConstant24    
+        // We need to resolve what operand was used to store this constant.
+        // so we know to read either the next byte or next 3 bytes.
+        // This is a pending workaround until a solution is found.
+        match self.read_constant(chunk, false) {
+            Value::String(symbol) => string_interner::get_string(symbol),
             _ => None,
         }
     }

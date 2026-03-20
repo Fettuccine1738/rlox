@@ -82,7 +82,8 @@ pub struct Line(pub u32);
 #[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<u8>, // uint8(bits)_t
-    pub constants: Vec<Value>,
+    // if constants.len() > 255, this means 
+    pub constants: Vec<Value>, 
     pub lines: Vec<Line>,
 }
 

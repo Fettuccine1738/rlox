@@ -10,3 +10,5 @@ Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 - support string interpolation.
 
 - todo rename ambigous match_char in scanner to next_match_char
+
+- resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 

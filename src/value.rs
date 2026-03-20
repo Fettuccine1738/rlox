@@ -3,6 +3,8 @@ use std::{
     ops::{Add, Div, Mul, Neg, Sub},
 };
 
+use string_interner::symbol::SymbolU32;
+
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
@@ -14,7 +16,7 @@ pub enum Value {
     Object(Box<HeapAllocatedObj>),
     // interned strings allow us to compare addreses which is more efficient
     // than comparing the values(contents) of the strings themselves.
-    String(usize),
+    String(SymbolU32),
 }
 
 impl Value {
