@@ -116,6 +116,14 @@ impl Add for Value {
                 let mut concat = l.as_string().unwrap().to_owned();
                 concat.push_str(r.as_string().unwrap());
                 Some(Value::new_string_obj(concat))
+            },
+            (Value::String(lhs), Value::String(rhs)) => {
+                todo!()
+                // let l_str = VM::get_interned_strings(lhs).unwrap();
+                // let r_str = VM::get_interned_strings(rhs).unwrap();
+                // let concat = VM::get_or_intern(l_str.push_str(&r_str));
+                // // borrow the interned String?? 
+                // Some(Value::String(concat))
             }
             _ => None,
         }

@@ -1,3 +1,5 @@
+pub mod string_interner;
+
 use crate::value::Value;
 use std::{fmt::Debug, hash::Hash};
 
@@ -16,11 +18,11 @@ use std::{fmt::Debug, hash::Hash};
 /// K: String
 #[derive(Debug)]
 pub struct HashTable {
-    len: u32,
     /// Vec<Option<Entry>> is used here for open addressing, i.e (find the next empty spot when keys collide)
     /// Some = occupied,
     /// None =empty slot, terminate probing
     pub entries: Vec<Option<Entry<String, Value>>>,
+    len: u32,
 }
 
 #[derive(Debug)]

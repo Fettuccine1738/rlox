@@ -23,6 +23,8 @@ pub enum OpCode {
     Less = 14,
     Print = 15,
     Pop = 16,
+    DefinedGlobal = 17,
+    GetGlobal = 18,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -62,6 +64,8 @@ impl TryFrom<u8> for OpCode {
             14 => Ok(Self::Less),
             15 => Ok(Self::Print),
             16 => Ok(Self::Pop),
+            17 => Ok(Self::DefinedGlobal),
+            18 => Ok(Self::GetGlobal),
             _ => Err(()),
         }
     }
@@ -163,6 +167,8 @@ impl Chunk {
             OpCode::Less => Self::simple_instruction("OP_LESS", offset),
             OpCode::Print => Self::simple_instruction("OP_PRINT", offset),
             OpCode::Pop => Self::simple_instruction("OP_POP", offset),
+            OpCode::DefinedGlobal => Self::simple_instruction("OP_DEFINE_GLOBAL", offset),
+            OpCode::GetGlobal => Self::constant_instruction("OP_GET_GLOBAL", offset),
         }
     }
 
@@ -171,6 +177,11 @@ impl Chunk {
         offset + 1
     }
 
+    // TODO: fix this, compare with impl in the book!
+    fn constant_instruction(name: &str, offset: usize) -> usize {
+        println!("   {name}");
+        offset + 1
+    }
     // reads the corresponding value of the OP_CONSTANT24 operand 24 bits and
     // returns a usize to index into the constants array
     fn read_long_constant(&self, offset: usize) -> usize {

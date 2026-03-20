@@ -2,14 +2,18 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
-// use std::cell::RefCell;
-// use std::rc::Rc;
+
+use ::string_interner::Symbol;
+use ::string_interner::symbol::SymbolU32;
+
 use self::parser::Parser;
 use self::scanner::Scanner;
 use self::token::Kind;
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::value::Value;
+use crate::compiler::token::Token;
+use crate::data_structures::string_interner::{self};
 
 #[derive(Debug)]
 pub struct Compiler<'a> {
@@ -110,20 +114,33 @@ impl Compiler<'_> {
     }
 
     fn variable_declaration(&mut self) {
-        let global: u8 = self.parse_variable("Expect variable name.");
+        let global: OpCode = self.parse_variable("Expect variable name.");
 
-        // looks for an initializer expression. 
+        // usecase: this branch decides what the Value in Variable declaration is.
+        // case: var a = foo();  == the rhs expression  is evaluated.
+        // case:  var a; == this expands to var a = NIL;
         if self.match_token(Kind::Equal) {
             self.expression();
         } else { // initialize to Nil.
             self.emit_op_code_byte(OpCode::NIL);
         }
+
         self.consume(Kind::SemiColon, "Expect ';' after expression.");
         self.define_variable(global);
     }
 
-    fn define_variable(&mut self, globals: u8) {
-        todo!()
+    fn variable(&mut self) {
+        self.named_variable(self.parser.previous)
+    }
+
+    fn named_variable(&mut self, token: Token) {
+        let op_code: OpCode = self.identifier_constant(token);
+        self.emit_op_code_bytes(OpCode::GetGlobal, op_code);
+    }
+
+    fn define_variable(&mut self, global: OpCode) {
+        let dummy = OpCode::Add; //NOTE: remove later.
+        self.emit_op_code_bytes(dummy, global);
     }
 
     fn synchronize(&mut self) {
@@ -254,13 +271,15 @@ impl Compiler<'_> {
         }
     }
 
-    fn parse_variable(&mut self, err_msg: &'static str) -> u8 {
+    fn parse_variable(&mut self, err_msg: &'static str) -> OpCode {
         self.consume(Kind::Identifier, err_msg);
-        self.identifier_constant()
+        self.identifier_constant(self.parser.previous)
     }
 
-    fn identifier_constant(&mut self) -> u8 {
-        todo!()
+    // code smell: Does this really need to be an associated func?? 
+    fn identifier_constant(&mut self, token: Token) -> OpCode {
+        let symbol: SymbolU32 = string_interner::intern(token.lexeme);
+        Self::make_constant(Value::String(symbol.to_usize()), self.chunk)
     }
 
     /// ---------associated functions------------------
@@ -416,6 +435,7 @@ static RULES: [ParseRule; 40] = {
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
     rules[(Kind::String as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.string(), Precedence::None);
-
+    rules[(Kind::Identifier as u8) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.variable(), Precedence::None);
     rules
 };

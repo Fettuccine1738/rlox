@@ -72,7 +72,7 @@ fn main() {
     use string_interner::DefaultStringInterner;
     use string_interner::Symbol;
 
-    let interner = <DefaultStringInterner>::from_iter(["Earth", "Water", "Fire", "Air"]);
+    let interner = <DefaultStringInterner>::from_iter(["Earth", "Water", "Fire", "Air", "AirFire"]);
     for (sym, str) in &interner {
         println!("{} = {}", sym.to_usize(), str);
     }

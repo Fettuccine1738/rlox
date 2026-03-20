@@ -1,35 +1,21 @@
 use core::panic;
 use std::ops::{Add, Div, Mul, Sub};
-use std::sync::{LazyLock, Mutex};
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
+use crate::data_structures::HashTable;
+use crate::value::Value;
+use crate::data_structures::string_interner::{self};
+
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;
-use crate::value::Value;
-use string_interner::{
-    StringInterner,
-    backend::StringBackend,
-    symbol::{Symbol, SymbolU32},
-};
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
 
-type Interner = LazyLock<Mutex<StringInterner<StringBackend>>>;
-static STRING_INTERNALS: Interner = LazyLock::new(|| Mutex::new(StringInterner::default()));
-
-pub fn intern(string: &str) -> SymbolU32 {
-    let mut interner = STRING_INTERNALS.lock().unwrap();
-    return interner.get_or_intern(string);
-}
-
-pub fn find_string(string: &str) -> usize {
-    let mut interner = STRING_INTERNALS.lock().unwrap();
-    return interner.get_or_intern(string).to_usize();
-}
+static VM_GLOBALS: HashTable = HashTable::new();
 
 // PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
@@ -176,6 +162,22 @@ impl VM {
                     // discard the result.
                     let _ = self.stack.pop();
                 }
+                OpCode::DefinedGlobal => { 
+                    // used to strore the global Variable and Value pairs.
+                    let name: String = todo!();
+                    // NOTE: Value is not popped directly off the stack.
+                    // This is to ensure that the VM can still find the value after/during garbage collection.b
+                    VM_GLOBALS.insert(name, self.peek(0));
+                    self.stack.pop(); // discard
+                }
+                OpCode::GetGlobal => {
+                    let name: String = todo!();
+                    let value: Value = match VM_GLOBALS.get(name) {
+                        Some(value) => value,
+                        None => return InterpretResult::RuntimeError
+                    };
+                    self.stack.push(value);
+                }
                 _ => todo!(),
             }
         }
@@ -220,6 +222,16 @@ impl VM {
             OpCode::Divide => lhs.div(rhs),
             OpCode::Multiply => lhs.mul(rhs),
             OpCode::Subtract => lhs.sub(rhs),
+            _ => None,
+        }
+    }
+
+    fn read_string(&mut self) -> Option<String> {
+        let constant: Value = self.read_constant(chunk, is_long); 
+        match constant {
+            Value::String(index) => {
+                return string_interner::get_string(index);
+            },
             _ => None,
         }
     }
