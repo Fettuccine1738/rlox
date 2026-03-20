@@ -32,7 +32,7 @@ impl Compiler<'_> {
 
         while !compiler.match_token(Kind::EOF) {
             compiler.declaration();
-        } 
+        }
         // compiler.expression();
         // compiler.consume(Kind::EOF, "Expected end of expression.");
 
@@ -46,7 +46,7 @@ impl Compiler<'_> {
 
     fn match_token(&mut self, kind: Kind) -> bool {
         if !self.check(kind) {
-            false 
+            false
         } else {
             self.parser.advance();
             true
@@ -64,7 +64,6 @@ impl Compiler<'_> {
     fn emit_op_code_byte(&mut self, op_code: OpCode) {
         self.emit_byte(op_code as u8);
     }
-
 
     // byte may be opcode or operand
     fn emit_byte(&mut self, byte: u8) {
@@ -103,13 +102,62 @@ impl Compiler<'_> {
     }
 
     fn declaration(&mut self) {
-        self.statement();
+        if self.match_token(Kind::Var) {
+            self.variable_declaration();
+        } else {
+            self.statement();
+        }
+
+        if self.parser.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn variable_declaration(&mut self) {
+        let global: u8 = parse_variable("Expect variable name.");
+
+        // looks for an initializer expression. 
+        if self.match_token(Kind::Equal) {
+            self.expression();
+        } else { // initialize to Nil.
+            self.emit_op_code_byte(OpCode::NIL);
+        }
+        self.consume(Kind::SemiColon, "Expect ';' after expression.");
+        self.define_variable(global);
+    }
+
+    fn define_variable(&mut self, globals: u8) {
+        todo!()
+    }
+
+    fn synchronize(&mut self) {
+        self.parser.panic_mode = false;
+
+        while self.parser.current.kind != Kind::EOF {
+            if self.parser.previous.kind == Kind::SemiColon {
+                return;
+            }
+
+            match self.parser.current.kind {
+                Kind::Class | Kind::Fun | Kind::Var | Kind::If |
+                Kind::While | Kind::Print | Kind::Return => return,
+                _ => (),
+            }
+        }
     }
 
     fn statement(&mut self) {
         if self.match_token(Kind::Print) {
             self.print_statement();
+        } else {
+            self.expr_statement();
         }
+    }
+
+    fn expr_statement(&mut self) {
+        self.expression();
+        self.consume(Kind::SemiColon, "Expect ';' after expression.");
+        self.emit_op_code_byte(OpCode::Pop);
     }
 
     fn print_statement(&mut self) {
@@ -205,6 +253,15 @@ impl Compiler<'_> {
         } else {
             self.parser.error("expected an expression here.");
         }
+    }
+
+    fn parse_variable(&mut self, err_msg: &'static str) -> u8 {
+        self.consume(Kind::Identifier, err_msg);
+        self.identifier_constant()
+    }
+
+    fn identifier_constant(&mut self) -> u8 {
+        todo!()
     }
 
     /// ---------associated functions------------------

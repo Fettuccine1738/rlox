@@ -1,8 +1,7 @@
 use std::{
-    fmt::{Display},
+    fmt::Display,
     ops::{Add, Div, Mul, Neg, Sub},
 };
-
 
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
@@ -13,8 +12,8 @@ pub enum Value {
     Nil,
     Number(f64),
     Object(Box<HeapAllocatedObj>),
-    // interned strings allow us to compare addreses which is more efficient 
-    // than comparing the values(contents) of the strings themselves.    
+    // interned strings allow us to compare addreses which is more efficient
+    // than comparing the values(contents) of the strings themselves.
     String(usize),
 }
 
@@ -59,7 +58,6 @@ impl Value {
     pub fn new_string_obj(s: String) -> Self {
         Value::Object(Box::new(HeapAllocatedObj::String(s)))
     }
-    
 
     pub fn values_equal(a: Value, b: Value) -> bool {
         match (a, b) {
@@ -70,7 +68,7 @@ impl Value {
                 (HeapAllocatedObj::String(a), HeapAllocatedObj::String(b)) => a == b,
                 // _ => false
             },
-            (Value::String(lsz), Value::String(rsz) ) => lsz == rsz,
+            (Value::String(lsz), Value::String(rsz)) => lsz == rsz,
             _ => false,
         }
     }
@@ -89,7 +87,7 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Nil => write!(f, "{}", *self),
             Value::Object(o) => write!(f, "{}", o),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

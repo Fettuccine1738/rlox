@@ -46,6 +46,13 @@ pub mod test {
         assert!(Compiler::compile("\"st\" +   \"ri\" + \"ing\"", &mut ch));
     }
 
+    #[test]
+    fn tests_valid_printstmt_successful() {
+        let mut ch: Chunk = Chunk::new();
+        let src = "print 1 + 2;";
+        assert!(Compiler::compile(src, &mut chunk));
+    }
+
     // TODO: transfer to test module.
     fn sample_chunk() {
         // let virtual_machine = VM::init();

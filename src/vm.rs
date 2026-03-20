@@ -9,7 +9,11 @@ use crate::compiler::Compiler;
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;
 use crate::value::Value;
-use string_interner::{symbol::{SymbolU32, Symbol}, backend::StringBackend, StringInterner};
+use string_interner::{
+    StringInterner,
+    backend::StringBackend,
+    symbol::{Symbol, SymbolU32},
+};
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
@@ -165,6 +169,11 @@ impl VM {
                 OpCode::Print => {
                     let value = self.stack.pop();
                     println!("{:?}", value);
+                }
+                OpCode::Pop => {
+                    // used for expression stmts to evaluate an expression and
+                    // discard the result.
+                    let _ = self.stack.pop();
                 }
                 _ => todo!(),
             }
