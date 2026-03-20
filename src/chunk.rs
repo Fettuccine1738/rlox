@@ -60,6 +60,8 @@ impl TryFrom<u8> for OpCode {
             12 => Ok(Self::Equal),
             13 => Ok(Self::Greater),
             14 => Ok(Self::Less),
+            15 => Ok(Self::Print),
+            16 => Ok(Self::Pop),
             _ => Err(()),
         }
     }

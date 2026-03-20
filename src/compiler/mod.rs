@@ -20,12 +20,8 @@ pub struct Compiler<'a> {
 impl Compiler<'_> {
     // associated function, like java static functions
     pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
-        let parser: Parser = Parser::new(Scanner::new(source));
-        // compiling_chunk may be required later and to allow mulitple owners to mutate
-        // chunk. Rc::RefCell is being used here.
-        // let _compiling_chunk: Rc<RefCell<&mut Chunk>> = Rc::new(RefCell::new(chunk));
         let mut compiler: Compiler = Compiler {
-            parser,
+            parser: Parser::new(Scanner::new(source)),
             chunk: chunk,
         };
         compiler.parser.advance();
@@ -114,7 +110,7 @@ impl Compiler<'_> {
     }
 
     fn variable_declaration(&mut self) {
-        let global: u8 = parse_variable("Expect variable name.");
+        let global: u8 = self.parse_variable("Expect variable name.");
 
         // looks for an initializer expression. 
         if self.match_token(Kind::Equal) {
@@ -231,6 +227,9 @@ impl Compiler<'_> {
         let lexeme = self.parser.previous.lexeme;
         let trimmed_lexeme = (&lexeme[1..lexeme.len() - 1]).to_owned();
         self.emit_constant(Value::new_string_obj(trimmed_lexeme));
+        // NOTE: New method to creating and working with string.
+        // let symbol = StringInterner.get_or_intern(trimmed_lexeme);
+        // self.emit_constant(Value::String(symbol.to_usize()));
     }
 
     /// calls using precedence ensures only operators have higher precedence are executed.

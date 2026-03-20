@@ -105,6 +105,7 @@ impl VM {
             }
 
             let instruction: OpCode = OpCode::try_from(self.read_byte(chunk)).expect("");
+            println!("debuging {}", instruction);
 
             match instruction {
                 // OpCode::Return => {
