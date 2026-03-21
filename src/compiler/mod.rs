@@ -59,7 +59,7 @@ impl Compiler<'_> {
         self.emit_byte(OpCode::Return as u8);
     }
 
-    fn emit_op_code_byte(&mut self, op_code: OpCode) {
+    fn emit_opcode(&mut self, op_code: OpCode) {
         self.emit_byte(op_code as u8);
     }
 
@@ -68,7 +68,7 @@ impl Compiler<'_> {
         self.chunk.write(byte, self.parser.previous.line);
     }
 
-    fn emit_op_code_bytes(&mut self, op_1: OpCode, op_2: OpCode) {
+    fn emit_opcodes(&mut self, op_1: OpCode, op_2: OpCode) {
         self.emit_bytes(op_1 as u8, op_2 as u8);
     }
 
@@ -120,25 +120,31 @@ impl Compiler<'_> {
         if self.match_token(Kind::Equal) {
             self.expression();
         } else { // initialize to Nil.
-            self.emit_op_code_byte(OpCode::NIL);
+            self.emit_opcode(OpCode::NIL);
         }
 
         self.consume(Kind::SemiColon, "Expect ';' after expression.");
         self.define_variable(global);
     }
 
-    fn variable(&mut self) {
-        self.named_variable(self.parser.previous)
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.parser.previous, can_assign)
     }
 
-    fn named_variable(&mut self, token: Token) {
-        let op_code: OpCode = self.identifier_constant(token);
-        self.emit_op_code_bytes(OpCode::GetGlobal, op_code);
+    fn named_variable(&mut self, token: Token, can_assign: bool) {
+        let arg: OpCode = self.identifier_constant(token);
+
+        if can_assign && self.match_token(Kind::Equal) {
+            self.expression();
+            self.emit_opcodes(OpCode::SetGlobal, arg);
+        } else {
+            self.emit_opcodes(OpCode::GetGlobal, arg);
+        }
     }
 
     fn define_variable(&mut self, global: OpCode) {
         let dummy = OpCode::Add; //NOTE: remove later.
-        self.emit_op_code_bytes(dummy, global);
+        self.emit_opcodes(dummy, global);
     }
 
     fn synchronize(&mut self) {
@@ -168,13 +174,13 @@ impl Compiler<'_> {
     fn expr_statement(&mut self) {
         self.expression();
         self.consume(Kind::SemiColon, "Expect ';' after expression.");
-        self.emit_op_code_byte(OpCode::Pop);
+        self.emit_opcode(OpCode::Pop);
     }
 
     fn print_statement(&mut self) {
         self.expression(); // evaluates expression to print sstatement.
         self.consume(Kind::SemiColon, "Expect ';' after value.");
-        self.emit_op_code_byte(OpCode::Print);
+        self.emit_opcode(OpCode::Print);
     }
 
     fn number(&mut self) {
@@ -218,12 +224,12 @@ impl Compiler<'_> {
             Kind::Minus => self.emit_byte(OpCode::Subtract as u8),
             Kind::Star => self.emit_byte(OpCode::Multiply as u8),
             Kind::Slash => self.emit_byte(OpCode::Divide as u8),
-            Kind::BangEquals => self.emit_op_code_bytes(OpCode::Equal, OpCode::Not),
-            Kind::EqualEquals => self.emit_op_code_byte(OpCode::Equal),
-            Kind::Greater => self.emit_op_code_byte(OpCode::Greater),
-            Kind::GreaterEqual => self.emit_op_code_bytes(OpCode::Less, OpCode::Not),
-            Kind::Less => self.emit_op_code_byte(OpCode::Less),
-            Kind::LessEqual => self.emit_op_code_bytes(OpCode::Greater, OpCode::Not),
+            Kind::BangEquals => self.emit_opcodes(OpCode::Equal, OpCode::Not),
+            Kind::EqualEquals => self.emit_opcode(OpCode::Equal),
+            Kind::Greater => self.emit_opcode(OpCode::Greater),
+            Kind::GreaterEqual => self.emit_opcodes(OpCode::Less, OpCode::Not),
+            Kind::Less => self.emit_opcode(OpCode::Less),
+            Kind::LessEqual => self.emit_opcodes(OpCode::Greater, OpCode::Not),
             _ => (),
         }
     }
@@ -253,17 +259,29 @@ impl Compiler<'_> {
     fn parse_precedence(&mut self, precedence: Precedence) {
         self.parser.advance();
         if let Some(prefix) = Self::get_parse_rule(self.parser.previous.kind).prefix {
-            prefix(self, false);
+            // Some infix operations destroy the precedence operation.
+            // take a * b = c + d; 
+            // when parsing the right hand to the infix op(*), variable b 
+            // accepts any Precedent(None) and the expression expands to
+            // a * (b = c + d) instead. 
+            // Can-assign; allows assignement when in an assignment expression or top-level expression e.g expr-stmt.
+            let can_assign: bool  = precedence <= Precedence::Assignment;
+            prefix(self, can_assign);
 
             let dbg_prec = precedence as u8;
 
             while dbg_prec <= (Self::get_parse_rule(self.parser.current.kind).precedence as u8) {
                 self.parser.advance();
-                let infix: ParseFn = Self::get_parse_rule(self.parser.previous.kind)
-                    .infix
-                    .unwrap();
-                infix(self, false);
+                match Self::get_parse_rule(self.parser.previous.kind).infix {
+                    Some(infix) => infix(self, can_assign),
+                    None => self.parser.error("Unexpected infix expression."),
+                }
             }
+
+            if can_assign && self.match_token(Kind::Equal) {
+                self.parser.error("Invalid assignment target.");
+            }
+
         } else {
             self.parser.error("expected an expression here.");
         }
@@ -297,7 +315,7 @@ impl Compiler<'_> {
 
 //-----------------Precedence-------------------
 // Lox's precedence levels in order from lowest to highest
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
 pub enum Precedence {
     None = 0,
@@ -434,6 +452,6 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::String as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.string(), Precedence::None);
     rules[(Kind::Identifier as u8) as usize] =
-        ParseRule::new_prefix(|compiler, _| compiler.variable(), Precedence::None);
+        ParseRule::new_prefix(|compiler, can_assign| compiler.variable(can_assign), Precedence::None);
     rules
 };

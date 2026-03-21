@@ -1,4 +1,5 @@
 use core::panic;
+use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 
 //------------Virtual-machine
@@ -180,12 +181,25 @@ impl VM {
                     };
                     self.stack.push(value);
                 }
+                OpCode::SetGlobal => {
+                    let name: String = self.read_string(chunk).unwrap();
+                    let current: Value = self.peek(0);
+
+                    // Throw RuntimeError if assignment to an undeclared global variable.
+                    // insert returns true if a no previous value was declared with this variable name.
+                    // false otherwise.
+                    if self.globals.insert(name.clone(), current) {
+                        self.globals.delete(&name);
+                        Self::runtime_error(self, chunk, format!("Undefinded Variable  '{}'.", name).as_str());
+                        return InterpretResult::RuntimeError; 
+                    }
+                }
                 _ => todo!(),
             }
         }
     }
 
-    fn runtime_error(vm: &mut VM, chunk: &Chunk, msg: &'static str) {
+    fn runtime_error(vm: &mut VM, chunk: &Chunk, msg: &str) {
         eprintln!("{}", msg);
         let instruction: usize = vm.ip - 1;
         let line = chunk.lines[instruction];
@@ -229,11 +243,10 @@ impl VM {
     }
 
     fn read_string(&mut self, chunk: &Chunk) -> Option<String> {
-        // HACK + TODO: Because we have 2 constant-indexing Operands OpConstant and OpConstant24    
+        // Because we have 2 constant-indexing Operands OpConstant and OpConstant24    
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
-        // This is a pending workaround until a solution is found.
-        match self.read_constant(chunk, false) {
+        match self.read_constant(chunk, self.ip > 255) {
             Value::String(symbol) => interner::get_string(symbol),
             _ => None,
         }

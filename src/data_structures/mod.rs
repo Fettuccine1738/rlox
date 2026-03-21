@@ -175,6 +175,10 @@ impl HashTable {
 
         removed
     }
+
+    pub fn contains_key<T>(_key: T) -> bool {
+        todo!()
+    }
 }
 
 // holds iterator state.

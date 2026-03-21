@@ -25,6 +25,7 @@ pub enum OpCode {
     Pop = 16,
     DefinedGlobal = 17,
     GetGlobal = 18,
+    SetGlobal = 19,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -66,6 +67,7 @@ impl TryFrom<u8> for OpCode {
             16 => Ok(Self::Pop),
             17 => Ok(Self::DefinedGlobal),
             18 => Ok(Self::GetGlobal),
+            19 => Ok(Self::SetGlobal),
             _ => Err(()),
         }
     }
@@ -170,6 +172,7 @@ impl Chunk {
             OpCode::Pop => Self::simple_instruction("OP_POP", offset),
             OpCode::DefinedGlobal => Self::simple_instruction("OP_DEFINE_GLOBAL", offset),
             OpCode::GetGlobal => Self::constant_instruction("OP_GET_GLOBAL", offset),
+            OpCode::SetGlobal => Self::constant_instruction("OP_SET_GLOBAL", offset),
         }
     }
 
