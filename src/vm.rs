@@ -1,6 +1,7 @@
 use core::panic;
-use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
+
+use string_interner::symbol::{self, SymbolU32};
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
@@ -165,7 +166,7 @@ impl VM {
                 }
                 OpCode::DefinedGlobal => { 
                     // used to strore the global Variable and Value pairs.
-                    let name: String = self.read_string(chunk).unwrap();
+                    let name = self.read_string(chunk).unwrap();
                     // NOTE: Value is not popped directly off the stack.
                     // This is to ensure that the VM can still find the value after/during garbage collection.b
                     let value = self.peek(0);
@@ -173,24 +174,24 @@ impl VM {
                     self.stack.pop(); // discard
                 }
                 OpCode::GetGlobal => {
-                    let name: String = self.read_string(chunk).unwrap();
+                    let name = self.read_string(chunk).unwrap();
                     // here is the actual value associated with this variable name.
-                    let value: Value = match self.globals.get(&name) {
+                    let value: Value = match self.globals.get(name) {
                         Some(value) => value,
                         None => return InterpretResult::RuntimeError
                     };
                     self.stack.push(value);
                 }
                 OpCode::SetGlobal => {
-                    let name: String = self.read_string(chunk).unwrap();
+                    let symbol: SymbolU32 = self.read_string(chunk).unwrap();
                     let current: Value = self.peek(0);
 
                     // Throw RuntimeError if assignment to an undeclared global variable.
                     // insert returns true if a no previous value was declared with this variable name.
                     // false otherwise.
-                    if self.globals.insert(name.clone(), current) {
-                        self.globals.delete(&name);
-                        Self::runtime_error(self, chunk, format!("Undefinded Variable  '{}'.", name).as_str());
+                    if self.globals.insert(symbol, current) {
+                        self.globals.delete(symbol);
+                        Self::runtime_error(self, chunk, format!("Undefinded Variable  '{}'.", interner::get_string(symbol).unwrap()).as_str());
                         return InterpretResult::RuntimeError; 
                     }
                 }
@@ -242,12 +243,12 @@ impl VM {
         }
     }
 
-    fn read_string(&mut self, chunk: &Chunk) -> Option<String> {
+    fn read_string(&mut self, chunk: &Chunk) -> Option<SymbolU32> {
         // Because we have 2 constant-indexing Operands OpConstant and OpConstant24    
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
         match self.read_constant(chunk, self.ip > 255) {
-            Value::String(symbol) => interner::get_string(symbol),
+            Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
         }
     }

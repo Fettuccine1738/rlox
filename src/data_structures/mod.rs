@@ -1,7 +1,9 @@
 pub mod interner;
 
+use string_interner::{Symbol, symbol::SymbolU32};
+
 use crate::value::Value;
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug};
 
 // #[derive(Debug)]
 // pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
@@ -15,13 +17,14 @@ use std::{fmt::Debug, hash::Hash};
 //     value: V
 //  }
 
-/// K: String
+/// K: SymbolU32 is the interned string id, the Value::String(SymbolU32) 
+/// already carries required information, no need duplicating the interened String again.
 #[derive(Debug)]
 pub struct HashTable {
     /// Vec<Option<Entry>> is used here for open addressing, i.e (find the next empty spot when keys collide)
     /// Some = occupied,
-    /// None =empty slot, terminate probing
-    pub entries: Vec<Option<Entry<String, Value>>>,
+    /// None = empty slot, terminate probing.
+    pub entries: Vec<Option<Entry<SymbolU32, Value>>>,
     len: u32,
 }
 
@@ -32,35 +35,39 @@ pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
 }
 
 //--------------utils---------------------------
-macro_rules! hash_str {
-    ($val:expr) => {{
-        let s: &str = $val; // complie-time type assertion.
-        fnv1_hash(s) as usize
-    }};
-}
+// macro_rules! hash_str {
+//     ($val:expr) => {{
+//         let s: &str = $val; // complie-time type assertion.
+//         fnv1_hash(s) as usize
+//     }};
+// }
+// pub fn fnv1_hash(key: &str) -> u32 {
+//     key.bytes()
+//         .fold(2166136261u32, |hash, b| (hash ^ (b as u32)) * 16777619)
+// }
 
-pub fn fnv1_hash(key: &str) -> u32 {
-    key.bytes()
-        .fold(2166136261u32, |hash, b| (hash ^ (b as u32)) * 16777619)
+pub fn fnv1_hash(key: SymbolU32) -> u32 {
+    let hash = 2166136261u32;
+    (hash ^ (key.to_usize() as u32)) * 16777619u32
 }
 
 pub struct Iter<'a> {
-    iter: std::iter::Flatten<std::slice::Iter<'a, Option<Entry<String, Value>>>>,
+    iter: std::iter::Flatten<std::slice::Iter<'a, Option<Entry<SymbolU32, Value>>>>,
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = &'a Entry<String, Value>;
+    type Item = &'a Entry<SymbolU32, Value>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 }
 pub struct IterMut<'a> {
-    iter: std::iter::Flatten<std::slice::IterMut<'a, Option<Entry<String, Value>>>>,
+    iter: std::iter::Flatten<std::slice::IterMut<'a, Option<Entry<SymbolU32, Value>>>>,
 }
 
 impl<'a> Iterator for IterMut<'a> {
-    type Item = &'a mut Entry<String, Value>;
+    type Item = &'a mut Entry<SymbolU32, Value>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -87,23 +94,23 @@ impl HashTable {
         }
     }
 
-    fn find_entry_mut(&mut self, key: &str) -> &mut Option<Entry<String, Value>> {
+    fn find_entry_mut(&mut self, key: SymbolU32) -> &mut Option<Entry<SymbolU32, Value>> {
         let index = self.get_key_index(key);
         &mut self.entries[index]
     }
 
-    fn find_entry(&self, key: &str) -> &Option<Entry<String, Value>> {
+    fn find_entry(&self, key: SymbolU32) -> &Option<Entry<SymbolU32, Value>> {
         let index = self.get_key_index(key);
         &self.entries[index]
     }
 
-    fn get_key_index(&self, key: &str) -> usize {
+    fn get_key_index(&self, key: SymbolU32) -> usize {
         let len = self.entries.len();
-        let start: usize = hash_str!(key) % len;
+        let start: usize = key.to_usize() % len;
         let mut index = start;
         loop {
             match &self.entries[index] {
-                Some(entry) if entry.key == *key => break, //return &mut self.entries[index],
+                Some(entry) if entry.key == key => break, //return &mut self.entries[index],
                 None => break, //  return &mut self.entries[index], // stop probing
                 _ => index = (index + 1) % len,
             }
@@ -116,8 +123,8 @@ impl HashTable {
         index
     }
 
-    pub fn insert(&mut self, key: String, v: Value) -> bool {
-        let entry = self.find_entry_mut(&key);
+    pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
+        let entry = self.find_entry_mut(key);
         let prev = std::mem::replace(entry, Some(Entry { key: key, value: v }));
         if prev.is_none() {
             self.len += 1;
@@ -126,10 +133,6 @@ impl HashTable {
             false
         }
     }
-
-    // pub fn get_entries(&mut self) -> Vec<Option<Entry<String, Value>>> {
-    //     self.entries
-    // }
 
     pub fn add_all(&mut self, other: HashTable) {
         self.entries.reserve(other.entries.len());
@@ -140,7 +143,7 @@ impl HashTable {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<Value> {
+    pub fn get(&self, key: SymbolU32) -> Option<Value> {
         if self.entries.is_empty() {
             return None;
         }
@@ -154,7 +157,7 @@ impl HashTable {
 
     /// returns a Some(Value) if the key exists
     /// and none if it doesn't.
-    pub fn delete(&mut self, key: &str) -> Option<Entry<String, Value>> {
+    pub fn delete(&mut self, key: SymbolU32) -> Option<Entry<SymbolU32, Value>> {
         if self.entries.is_empty() {
             return None;
         }
@@ -183,12 +186,12 @@ impl HashTable {
 
 // holds iterator state.
 pub struct MyIntoIter {
-    iter: std::vec::IntoIter<Option<Entry<String, Value>>>,
+    iter: std::vec::IntoIter<Option<Entry<SymbolU32, Value>>>,
 }
 
 // defines how to advance / consume next item.
 impl Iterator for MyIntoIter {
-    type Item = Entry<String, Value>;
+    type Item = Entry<SymbolU32, Value>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -203,7 +206,7 @@ impl Iterator for MyIntoIter {
 
 // defines how to turn value into an iterator.
 impl IntoIterator for HashTable {
-    type Item = Entry<String, Value>;
+    type Item = Entry<SymbolU32, Value>;
 
     type IntoIter = MyIntoIter;
 
