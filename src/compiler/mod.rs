@@ -326,11 +326,6 @@ impl Compiler<'_> {
         self.chunk.add_constant(Value::String(symbol))
     }
 
-    /// ---------associated functions------------------
-    fn make_constant(value: Value, chunk: &mut Chunk) -> usize {
-        chunk.add_constant(value)
-    }
-
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
         &RULES[(kind as u8) as usize]
     }
@@ -444,7 +439,7 @@ static RULES: [ParseRule; 40] = {
     );
 
     rules[(Kind::Plus as u8) as usize] =
-        ParseRule::new_infix(|compiler, _| compiler.unary(), Precedence::Term);
+        ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Term);
     rules[(Kind::Slash as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Factor);
     rules[(Kind::Star as u8) as usize] =

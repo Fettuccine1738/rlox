@@ -67,7 +67,6 @@ pub mod test {
         let _src2 = "var b = \"cow\";";
 
         assert!(Compiler::compile(_src, &mut chunk));
-        // Chunk::disassemble(&chunk)
     }
 
     #[test]
