@@ -164,7 +164,7 @@ impl VM {
                     // discard the result.
                     let _ = self.stack.pop();
                 }
-                OpCode::DefinedGlobal => { 
+                OpCode::DefineGlobal => { 
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string(chunk).unwrap();
                     // NOTE: Value is not popped directly off the stack.

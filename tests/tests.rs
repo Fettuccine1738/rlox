@@ -54,6 +54,16 @@ pub mod test {
         assert!(Compiler::compile(src, &mut chunk));
     }
 
+    #[test]
+    fn tests_global_declaration() {
+        let mut chunk: Chunk = Chunk::new();
+        let src = "var breakfast = \"beignets\"; \n\
+                         var beverage = \"capuccino\"; \n\
+                         breakfast = \"beignets with \"+ beverage; \n\
+                         print breakfast;";
+        assert!(Compiler::compile(src, &mut chunk));
+    }
+
     // TODO: transfer to test module.
     fn _sample_chunk() {
         // let virtual_machine = VM::init();

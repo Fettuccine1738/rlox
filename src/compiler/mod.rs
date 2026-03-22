@@ -2,6 +2,7 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
+use string_interner::symbol;
 use ::string_interner::symbol::SymbolU32;
 
 use self::parser::Parser;
@@ -100,6 +101,7 @@ impl Compiler<'_> {
     }
 
     fn declaration(&mut self) {
+        // if current token is Kind::Var consume the variable's name.
         if self.match_token(Kind::Var) {
             self.variable_declaration();
         } else {
@@ -244,13 +246,10 @@ impl Compiler<'_> {
     }
 
     fn string(&mut self) {
-        // trim off "" from both ends
         let lexeme = self.parser.previous.lexeme;
-        let trimmed_lexeme = (&lexeme[1..lexeme.len() - 1]).to_owned();
-        self.emit_constant(Value::new_string_obj(trimmed_lexeme));
-        // NOTE: New method to creating and working with string.
-        // let symbol = StringInterner.get_or_intern(trimmed_lexeme);
-        // self.emit_constant(Value::String(symbol.to_usize()));
+        // trim off "" from both ends
+        let trimmed_lexeme = &lexeme[1..lexeme.len() - 1];
+        self.emit_constant(Value::String(interner::intern(trimmed_lexeme)));
     }
 
     /// calls using precedence ensures only operators have higher precedence are executed.
@@ -292,7 +291,6 @@ impl Compiler<'_> {
         self.identifier_constant(self.parser.previous)
     }
 
-    // code smell: Does this really need to be an associated func?? 
     fn identifier_constant(&mut self, token: Token) -> OpCode {
         let symbol: SymbolU32 = interner::intern(token.lexeme);
         Self::make_constant(Value::String(symbol), self.chunk)
@@ -302,9 +300,9 @@ impl Compiler<'_> {
     fn make_constant(value: Value, chunk: &mut Chunk) -> OpCode {
         let index = chunk.add_constant(value);
         if index > std::u8::MAX as usize {
-            OpCode::Constant
-        } else {
             OpCode::Constant24
+        } else {
+            OpCode::Constant
         }
     }
 

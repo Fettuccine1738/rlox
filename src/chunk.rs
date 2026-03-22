@@ -23,7 +23,7 @@ pub enum OpCode {
     Less = 14,
     Print = 15,
     Pop = 16,
-    DefinedGlobal = 17,
+    DefineGlobal = 17,
     GetGlobal = 18,
     SetGlobal = 19,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
@@ -65,7 +65,7 @@ impl TryFrom<u8> for OpCode {
             14 => Ok(Self::Less),
             15 => Ok(Self::Print),
             16 => Ok(Self::Pop),
-            17 => Ok(Self::DefinedGlobal),
+            17 => Ok(Self::DefineGlobal),
             18 => Ok(Self::GetGlobal),
             19 => Ok(Self::SetGlobal),
             _ => Err(()),
@@ -170,7 +170,7 @@ impl Chunk {
             OpCode::Less => Self::simple_instruction("OP_LESS", offset),
             OpCode::Print => Self::simple_instruction("OP_PRINT", offset),
             OpCode::Pop => Self::simple_instruction("OP_POP", offset),
-            OpCode::DefinedGlobal => Self::simple_instruction("OP_DEFINE_GLOBAL", offset),
+            OpCode::DefineGlobal => Self::simple_instruction("OP_DEFINE_GLOBAL", offset),
             OpCode::GetGlobal => Self::constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => Self::constant_instruction("OP_SET_GLOBAL", offset),
         }
