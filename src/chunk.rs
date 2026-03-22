@@ -237,6 +237,19 @@ impl Chunk {
         self.constants.len() - 1 // index of the last push
     }
 
+    /// returns the index if this value is already in the constants pool.
+    /// otherwise add to the constant pool and return new index;
+    /// Optimization to reduce COmpiler adding new constant for every use.
+    pub fn add_if_absent(&mut self, value: Value) -> usize {
+        for (index, constant) in self.constants.iter().enumerate() {
+            if constant == &value {
+                return index;
+            }
+        } 
+
+        self.add_constant(value)
+    }
+
     pub fn resolve_index(index: usize) -> (u8, u8, u8) {
         let bits = index.to_le();
         let bits0_7 = (bits & 0xFF) as u8;

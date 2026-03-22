@@ -10,12 +10,12 @@ use crate::data_structures::interner::{self};
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Boolean(bool),
     Nil,
     Number(f64),
-    Object(Box<HeapAllocatedObj>),
+    Object(Box<HeapAllocatedObj>), // remove for now, not needed.
     // interned strings allow us to compare addreses which is more efficient
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
@@ -176,10 +176,8 @@ impl Sub for Value {
 }
 
 // -------------------------- Objects --------------
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum HeapAllocatedObj {
-    // RuntimeString(&'a str),
-    // ConstString(&'a str),
     String(String),
 }
 
@@ -193,11 +191,12 @@ impl HeapAllocatedObj {
     // }
 
     pub fn as_string(&self) -> Option<&str> {
-        if let HeapAllocatedObj::String(s) = self {
-            Some(s)
-        } else {
-            None
-        }
+        todo!()
+        // let HeapAllocatedObj::String(s) = self {
+        //     Some(s)
+        // } else {
+        //     None
+        // }
     }
 }
 

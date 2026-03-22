@@ -323,7 +323,7 @@ impl Compiler<'_> {
 
     fn identifier_constant(&mut self, token: Token) -> usize {
         let symbol: SymbolU32 = interner::intern(token.lexeme);
-        self.chunk.add_constant(Value::String(symbol))
+        self.chunk.add_if_absent(Value::String(symbol))
     }
 
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
