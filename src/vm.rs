@@ -1,22 +1,21 @@
 use core::panic;
 use std::ops::{Add, Div, Mul, Sub};
 
-use string_interner::symbol::{self, SymbolU32};
+use string_interner::symbol::SymbolU32;
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
 use crate::compiler::Compiler;
 use crate::data_structures::HashTable;
-use crate::value::Value;
 use crate::data_structures::interner::{self};
+use crate::value::Value;
 
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;
 
 pub const DEBUG_TRACE: bool = true;
 pub const STACK_MAX: usize = 256;
-
 
 // PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
@@ -47,7 +46,7 @@ impl VM {
             // chunk: None, // we don't always start out with valid chunks
             ip: 0usize,
             stack: Vec::with_capacity(STACK_MAX),
-            globals: HashTable::new()
+            globals: HashTable::new(),
         }
     }
 
@@ -164,7 +163,7 @@ impl VM {
                     // discard the result.
                     let _ = self.stack.pop();
                 }
-                OpCode::DefineGlobal => { 
+                OpCode::DefineGlobal => {
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string(chunk).unwrap();
                     // NOTE: Value is not popped directly off the stack.
@@ -178,7 +177,7 @@ impl VM {
                     // here is the actual value associated with this variable name.
                     let value: Value = match self.globals.get(name) {
                         Some(value) => value,
-                        None => return InterpretResult::RuntimeError
+                        None => return InterpretResult::RuntimeError,
                     };
                     self.stack.push(value);
                 }
@@ -191,8 +190,16 @@ impl VM {
                     // false otherwise.
                     if self.globals.insert(symbol, current) {
                         self.globals.delete(symbol);
-                        Self::runtime_error(self, chunk, format!("Undefinded Variable  '{}'.", interner::get_string(symbol).unwrap()).as_str());
-                        return InterpretResult::RuntimeError; 
+                        Self::runtime_error(
+                            self,
+                            chunk,
+                            format!(
+                                "Undefinded Variable  '{}'.",
+                                interner::get_string(symbol).unwrap()
+                            )
+                            .as_str(),
+                        );
+                        return InterpretResult::RuntimeError;
                     }
                 }
                 _ => todo!(),
@@ -244,7 +251,7 @@ impl VM {
     }
 
     fn read_string(&mut self, chunk: &Chunk) -> Option<SymbolU32> {
-        // Because we have 2 constant-indexing Operands OpConstant and OpConstant24    
+        // Because we have 2 constant-indexing Operands OpConstant and OpConstant24
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
         match self.read_constant(chunk, self.ip > 255) {

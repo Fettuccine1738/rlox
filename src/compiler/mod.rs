@@ -2,7 +2,6 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
-use string_interner::symbol;
 use ::string_interner::symbol::SymbolU32;
 
 use self::parser::Parser;
@@ -10,9 +9,9 @@ use self::scanner::Scanner;
 use self::token::Kind;
 use crate::chunk::Chunk;
 use crate::chunk::OpCode;
-use crate::value::Value;
 use crate::compiler::token::Token;
 use crate::data_structures::interner::{self};
+use crate::value::Value;
 
 #[derive(Debug)]
 pub struct Compiler<'a> {
@@ -73,14 +72,35 @@ impl Compiler<'_> {
         self.emit_bytes(op_1 as u8, op_2 as u8);
     }
 
+    fn emit_opcode_operand(&mut self, opcode: OpCode, index: usize) {
+        self.emit_opcode(opcode);
+        // resolve constant operand
+        if index > 255 {
+            let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(index);
+            self.emit_byte(bits0_7);
+            self.emit_byte(bits8_15);
+            self.emit_byte(bits16);
+        } else {
+            self.emit_byte(index as u8);
+        }
+    }
+
     fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
         self.chunk.write(byte_1, self.parser.previous.line);
         self.chunk.write(byte_2, self.parser.previous.line);
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let op: OpCode = Self::make_constant(value, self.chunk);
-        self.emit_byte(op as u8);
+        let index: usize = self.chunk.add_constant(value);
+        // emits the opcode and its byte operand (the index of the value in the constants array.)
+        self.emit_opcode_operand(
+            if index > 255 {
+                OpCode::Constant24
+            } else {
+                OpCode::Constant
+            },
+            index,
+        );
     }
 
     fn expression(&mut self) {
@@ -89,11 +109,17 @@ impl Compiler<'_> {
 
     fn end_compilation(&mut self) {
         self.emit_return();
-        #[cfg(debug_assertions)] // analogous to a #ifdef block in C
+        #[cfg(any(test, debug_assertions))] // analogous to a #ifdef block in C
         // custom features could be used too. #[cfg(feature="")]
-        if self.parser.had_error {
-            Chunk::disassemble(self.current_chunk(), "code");
-        }
+        println!("{:?}", self.chunk);
+        Chunk::disassemble(
+            self.current_chunk(),
+            if self.parser.had_error {
+                "Failed to Compile"
+            } else {
+                "Compile Successful"
+            },
+        );
     }
 
     fn current_chunk(&self) -> &Chunk {
@@ -114,14 +140,15 @@ impl Compiler<'_> {
     }
 
     fn variable_declaration(&mut self) {
-        let global: OpCode = self.parse_variable("Expect variable name.");
+        let global: usize = self.parse_variable("Expect variable name.");
 
         // usecase: this branch decides what the Value in Variable declaration is.
         // case: var a = foo();  == the rhs expression  is evaluated.
         // case:  var a; == this expands to var a = NIL;
         if self.match_token(Kind::Equal) {
             self.expression();
-        } else { // initialize to Nil.
+        } else {
+            // initialize to Nil.
             self.emit_opcode(OpCode::NIL);
         }
 
@@ -134,19 +161,18 @@ impl Compiler<'_> {
     }
 
     fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let arg: OpCode = self.identifier_constant(token);
+        let arg: usize = self.identifier_constant(token);
 
         if can_assign && self.match_token(Kind::Equal) {
             self.expression();
-            self.emit_opcodes(OpCode::SetGlobal, arg);
+            self.emit_opcode_operand(OpCode::SetGlobal, arg);
         } else {
-            self.emit_opcodes(OpCode::GetGlobal, arg);
+            self.emit_opcode_operand(OpCode::GetGlobal, arg);
         }
     }
 
-    fn define_variable(&mut self, global: OpCode) {
-        let dummy = OpCode::Add; //NOTE: remove later.
-        self.emit_opcodes(dummy, global);
+    fn define_variable(&mut self, global: usize) {
+        self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
 
     fn synchronize(&mut self) {
@@ -158,8 +184,13 @@ impl Compiler<'_> {
             }
 
             match self.parser.current.kind {
-                Kind::Class | Kind::Fun | Kind::Var | Kind::If |
-                Kind::While | Kind::Print | Kind::Return => return,
+                Kind::Class
+                | Kind::Fun
+                | Kind::Var
+                | Kind::If
+                | Kind::While
+                | Kind::Print
+                | Kind::Return => return,
                 _ => (),
             }
         }
@@ -259,12 +290,12 @@ impl Compiler<'_> {
         self.parser.advance();
         if let Some(prefix) = Self::get_parse_rule(self.parser.previous.kind).prefix {
             // Some infix operations destroy the precedence operation.
-            // take a * b = c + d; 
-            // when parsing the right hand to the infix op(*), variable b 
+            // take a * b = c + d;
+            // when parsing the right hand to the infix op(*), variable b
             // accepts any Precedent(None) and the expression expands to
-            // a * (b = c + d) instead. 
+            // a * (b = c + d) instead.
             // Can-assign; allows assignement when in an assignment expression or top-level expression e.g expr-stmt.
-            let can_assign: bool  = precedence <= Precedence::Assignment;
+            let can_assign: bool = precedence <= Precedence::Assignment;
             prefix(self, can_assign);
 
             let dbg_prec = precedence as u8;
@@ -280,30 +311,24 @@ impl Compiler<'_> {
             if can_assign && self.match_token(Kind::Equal) {
                 self.parser.error("Invalid assignment target.");
             }
-
         } else {
             self.parser.error("expected an expression here.");
         }
     }
 
-    fn parse_variable(&mut self, err_msg: &'static str) -> OpCode {
+    fn parse_variable(&mut self, err_msg: &'static str) -> usize {
         self.consume(Kind::Identifier, err_msg);
         self.identifier_constant(self.parser.previous)
     }
 
-    fn identifier_constant(&mut self, token: Token) -> OpCode {
+    fn identifier_constant(&mut self, token: Token) -> usize {
         let symbol: SymbolU32 = interner::intern(token.lexeme);
-        Self::make_constant(Value::String(symbol), self.chunk)
+        self.chunk.add_constant(Value::String(symbol))
     }
 
     /// ---------associated functions------------------
-    fn make_constant(value: Value, chunk: &mut Chunk) -> OpCode {
-        let index = chunk.add_constant(value);
-        if index > std::u8::MAX as usize {
-            OpCode::Constant24
-        } else {
-            OpCode::Constant
-        }
+    fn make_constant(value: Value, chunk: &mut Chunk) -> usize {
+        chunk.add_constant(value)
     }
 
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
@@ -449,7 +474,9 @@ static RULES: [ParseRule; 40] = {
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Comparison);
     rules[(Kind::String as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.string(), Precedence::None);
-    rules[(Kind::Identifier as u8) as usize] =
-        ParseRule::new_prefix(|compiler, can_assign| compiler.variable(can_assign), Precedence::None);
+    rules[(Kind::Identifier as u8) as usize] = ParseRule::new_prefix(
+        |compiler, can_assign| compiler.variable(can_assign),
+        Precedence::None,
+    );
     rules
 };

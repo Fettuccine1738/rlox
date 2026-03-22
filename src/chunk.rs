@@ -1,4 +1,4 @@
-use crate::value::Value;
+use crate::{data_structures::interner, value::Value};
 use std::fmt::Display;
 
 // each opcode determines the size of its operands.
@@ -84,8 +84,8 @@ pub struct Line(pub u32);
 #[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<u8>, // uint8(bits)_t
-    // if constants.len() > 255, this means 
-    pub constants: Vec<Value>, 
+    // if constants.len() > 255, this means
+    pub constants: Vec<Value>,
     pub lines: Vec<Line>,
 }
 
@@ -170,9 +170,9 @@ impl Chunk {
             OpCode::Less => Self::simple_instruction("OP_LESS", offset),
             OpCode::Print => Self::simple_instruction("OP_PRINT", offset),
             OpCode::Pop => Self::simple_instruction("OP_POP", offset),
-            OpCode::DefineGlobal => Self::simple_instruction("OP_DEFINE_GLOBAL", offset),
-            OpCode::GetGlobal => Self::constant_instruction("OP_GET_GLOBAL", offset),
-            OpCode::SetGlobal => Self::constant_instruction("OP_SET_GLOBAL", offset),
+            OpCode::DefineGlobal => chunk.constant_instruction("OP_DEFINE_GLOBAL", offset),
+            OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
+            OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
         }
     }
 
@@ -182,10 +182,16 @@ impl Chunk {
     }
 
     // TODO: fix this, compare with impl in the book!
-    fn constant_instruction(name: &str, offset: usize) -> usize {
-        println!("   {name}");
-        offset + 1
+    fn constant_instruction(&self, name: &str, offset: usize) -> usize {
+        print!("   {name}\t");
+        let index = self.code[offset + 1]; // index of value is embeded in the bytecode stream.
+        match self.constants[index as usize] {
+            Value::String(id) => println!("{}", interner::get_string(id).unwrap()),
+            _ => ()
+        }
+        offset + 2 // consume current bytecode and operand index.
     }
+
     // reads the corresponding value of the OP_CONSTANT24 operand 24 bits and
     // returns a usize to index into the constants array
     fn read_long_constant(&self, offset: usize) -> usize {
@@ -212,10 +218,10 @@ impl Chunk {
         } else {
             self.code.push(OpCode::Constant24 as u8);
             // resolve byte index.
-            let bits = idx.to_le();
-            self.code.push((bits & 0xFF) as u8);
-            self.code.push(((bits >> 8) & 0xFF) as u8);
-            self.code.push(((bits >> 16) & 0xFF) as u8);
+            let (bits0_7, bits8_15, bits16) = Self::resolve_index(idx);
+            self.code.push(bits0_7);
+            self.code.push(bits8_15);
+            self.code.push(bits16);
             // line num for constant bytecode and 3 line nums for the index.
             self.lines.push(Line(line));
             self.lines.push(Line(line));
@@ -229,5 +235,14 @@ impl Chunk {
     pub fn add_constant(&mut self, value: Value) -> usize {
         self.constants.push(value);
         self.constants.len() - 1 // index of the last push
+    }
+
+    pub fn resolve_index(index: usize) -> (u8, u8, u8) {
+        let bits = index.to_le();
+        let bits0_7 = (bits & 0xFF) as u8;
+        let bits8_15 = (bits & 0xFF) as u8;
+        let bits16 = (bits & 0xFF) as u8;
+
+        (bits0_7, bits8_15, bits16)
     }
 }

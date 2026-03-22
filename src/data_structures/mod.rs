@@ -3,7 +3,7 @@ pub mod interner;
 use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::value::Value;
-use std::{fmt::Debug};
+use std::fmt::Debug;
 
 // #[derive(Debug)]
 // pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
@@ -17,7 +17,7 @@ use std::{fmt::Debug};
 //     value: V
 //  }
 
-/// K: SymbolU32 is the interned string id, the Value::String(SymbolU32) 
+/// K: SymbolU32 is the interned string id, the Value::String(SymbolU32)
 /// already carries required information, no need duplicating the interened String again.
 #[derive(Debug)]
 pub struct HashTable {

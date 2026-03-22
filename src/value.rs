@@ -91,6 +91,10 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Nil => write!(f, "{}", *self),
             Value::Object(o) => write!(f, "{}", o),
+            Value::String(id) => {
+                let s = interner::get_string(*id).unwrap();
+                write!(f, "{}", s)
+            }
             _ => todo!(),
         }
     }
@@ -120,7 +124,7 @@ impl Add for Value {
                 let mut concat = l.as_string().unwrap().to_owned();
                 concat.push_str(r.as_string().unwrap());
                 Some(Value::new_string_obj(concat))
-            },
+            }
             (Value::String(lhs), Value::String(rhs)) => {
                 let l_str = interner::get_string(*lhs);
                 let r_str = interner::get_string(*rhs);
@@ -129,7 +133,7 @@ impl Add for Value {
                         l.push_str(&r);
                         let symbol = interner::intern(&l);
                         Some(Value::String(symbol))
-                    } 
+                    }
                     _ => None,
                 }
             }

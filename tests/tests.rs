@@ -38,7 +38,10 @@ pub mod test {
         let source = "1 + nil;";
         let mut vm = vm::VM::new();
         // NOTE: Do not compile directly with the VM.
-        assert_eq!(vm.interpret(source.to_owned()), InterpretResult::RuntimeError)
+        assert_eq!(
+            vm.interpret(source.to_owned()),
+            InterpretResult::RuntimeError
+        )
     }
 
     #[test]
@@ -57,15 +60,18 @@ pub mod test {
     #[test]
     fn tests_global_declaration() {
         let mut chunk: Chunk = Chunk::new();
-        let src = "var breakfast = \"beignets\"; \n\
+        let _src = "var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
-        assert!(Compiler::compile(src, &mut chunk));
+        let _src2 = "var b = \"cow\";";
+
+        assert!(Compiler::compile(_src, &mut chunk));
+        // Chunk::disassemble(&chunk)
     }
 
-    // TODO: transfer to test module.
-    fn _sample_chunk() {
+    #[test]
+    fn test_chunk_orders_byte_ok() {
         // let virtual_machine = VM::init();
         let mut ch: Chunk = Chunk::new();
         // let idx = ch.add_constant(1.2);
