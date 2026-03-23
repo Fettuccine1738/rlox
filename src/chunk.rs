@@ -239,7 +239,7 @@ impl Chunk {
 
     /// returns the index if this value is already in the constants pool.
     /// otherwise add to the constant pool and return new index;
-    /// Optimization to reduce COmpiler adding new constant for every use.
+    /// Optimization to reduce Compiler adding new constant for every use.
     pub fn add_if_absent(&mut self, value: Value) -> usize {
         for (index, constant) in self.constants.iter().enumerate() {
             if constant == &value {
@@ -253,8 +253,8 @@ impl Chunk {
     pub fn resolve_index(index: usize) -> (u8, u8, u8) {
         let bits = index.to_le();
         let bits0_7 = (bits & 0xFF) as u8;
-        let bits8_15 = (bits & 0xFF) as u8;
-        let bits16 = (bits & 0xFF) as u8;
+        let bits8_15 = ((bits >> 8) & 0xFF) as u8;
+        let bits16 = ((bits >> 16) & 0xFF) as u8;
 
         (bits0_7, bits8_15, bits16)
     }
