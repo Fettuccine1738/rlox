@@ -64,6 +64,7 @@ pub mod test {
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
+        //  var boole = !true; \n\
         let _src2 = "var b = \"cow\";";
 
         assert!(Compiler::compile(_src, &mut chunk));

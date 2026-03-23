@@ -163,6 +163,11 @@ impl VM {
                     // discard the result.
                     let _ = self.stack.pop();
                 }
+                OpCode::PopN => {
+                    // simple optimization to pop all elements at once.
+                    let n: u8 = self.read_byte(chunk);
+                    self.stack.truncate(n as usize);
+                }
                 OpCode::DefineGlobal => {
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string(chunk).unwrap();

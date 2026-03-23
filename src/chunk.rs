@@ -26,6 +26,9 @@ pub enum OpCode {
     DefineGlobal = 17,
     GetGlobal = 18,
     SetGlobal = 19,
+    GetLocal = 20,
+    SetLocal = 21,
+    PopN = 22,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -68,6 +71,9 @@ impl TryFrom<u8> for OpCode {
             17 => Ok(Self::DefineGlobal),
             18 => Ok(Self::GetGlobal),
             19 => Ok(Self::SetGlobal),
+            20 => Ok(Self::GetLocal),
+            21 => Ok(Self::SetLocal),
+            22 => Ok(Self::PopN),
             _ => Err(()),
         }
     }
@@ -162,9 +168,7 @@ impl Chunk {
             OpCode::True => Self::simple_instruction("OP_TRUE", offset),
             OpCode::False => Self::simple_instruction("OP_FALSE", offset),
             OpCode::NIL => Self::simple_instruction("OP_NIL", offset),
-            OpCode::Not => {
-                todo!()
-            }
+            OpCode::Not => Self::simple_instruction("OP_NOT", offset),
             OpCode::Equal => Self::simple_instruction("OP_EQUAL", offset),
             OpCode::Greater => Self::simple_instruction("OP_GREATER", offset),
             OpCode::Less => Self::simple_instruction("OP_LESS", offset),
@@ -173,6 +177,7 @@ impl Chunk {
             OpCode::DefineGlobal => chunk.constant_instruction("OP_DEFINE_GLOBAL", offset),
             OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
+            OpCode::PopN => chunk.constant_instruction("OP_SET_GLOBAL", offset),
         }
     }
 
@@ -185,10 +190,13 @@ impl Chunk {
     fn constant_instruction(&self, name: &str, offset: usize) -> usize {
         print!("   {name}\t");
         let index = self.code[offset + 1]; // index of value is embeded in the bytecode stream.
+
+        #[cfg(any(test, debug_assertions))]
         match self.constants[index as usize] {
             Value::String(id) => println!("{}", interner::get_string(id).unwrap()),
-            _ => ()
+            _ => (),
         }
+
         offset + 2 // consume current bytecode and operand index.
     }
 
@@ -245,7 +253,7 @@ impl Chunk {
             if constant == &value {
                 return index;
             }
-        } 
+        }
 
         self.add_constant(value)
     }

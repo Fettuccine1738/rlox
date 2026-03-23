@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Token<'src> {
     pub kind: Kind,
     pub lexeme: &'src str,

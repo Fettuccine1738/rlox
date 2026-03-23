@@ -14,18 +14,37 @@ use crate::data_structures::interner::{self};
 use crate::value::Value;
 
 #[derive(Debug)]
-pub struct Compiler<'a> {
-    parser: Parser<'a>,
-    chunk: &'a mut Chunk,
+pub struct Local<'src> {
+    name: Token<'src>,
+    depth: i32, // record the scope depth of the where the local var was declared.
 }
 
-impl Compiler<'_> {
+// the source string should not be 'static because you don't want to require that
+// it would mean only compiling string literals baked into the binary,
+// not strings read from files or stdin at runtime. Keeping it as a generic
+// 'src is the right call: it says "tokens borrow from whatever source string you give me,
+// and that source just needs to outlive the compiler".
+#[derive(Debug)]
+pub struct Compiler<'a, 'src> {
+    // 'src annotation here tells Rust that the tokens current and previous
+    // in the parser lives as long as the source string.
+    parser: Parser<'src>,
+    chunk: &'a mut Chunk,
+    locals: Vec<Local<'src>>,
+    scope_depth: i32, // the number of blocks surrouding the current bit of code being compiled.
+                      // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
+}
+
+impl<'src> Compiler<'_, 'src> {
     // associated function, like java static functions
     pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
         let mut compiler: Compiler = Compiler {
             parser: Parser::new(Scanner::new(source)),
             chunk: chunk,
+            scope_depth: 0,
+            locals: Vec::new(),
         };
+
         compiler.parser.advance();
 
         while !compiler.match_token(Kind::EOF) {
@@ -160,18 +179,36 @@ impl Compiler<'_> {
         self.named_variable(self.parser.previous, can_assign)
     }
 
-    fn named_variable(&mut self, token: Token, can_assign: bool) {
-        let arg: usize = self.identifier_constant(token);
+    fn named_variable(&mut self, name: Token, can_assign: bool) {
+        let (get_op, set_op, arg) = match self.resolve_local(&name) {
+            Some(index) => (OpCode::GetLocal, OpCode::SetLocal, index),
+            None => {
+                let idx: usize = self.identifier_constant(name);
+                (OpCode::GetGlobal, OpCode::SetGlobal, idx)
+            }
+        };
 
         if can_assign && self.match_token(Kind::Equal) {
             self.expression();
-            self.emit_opcode_operand(OpCode::SetGlobal, arg);
+            self.emit_opcode_operand(set_op, arg);
         } else {
-            self.emit_opcode_operand(OpCode::GetGlobal, arg);
+            self.emit_opcode_operand(get_op, arg);
         }
     }
 
+    fn resolve_local(&mut self, name: &Token) -> Option<usize> {
+        for (idx, local) in self.locals.iter().enumerate().rev() {
+            if *name == local.name {
+                return Some(idx);
+            }
+        }
+        None
+    }
+
     fn define_variable(&mut self, global: usize) {
+        if self.scope_depth > 0 {
+            return;
+        }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
 
@@ -199,8 +236,33 @@ impl Compiler<'_> {
     fn statement(&mut self) {
         if self.match_token(Kind::Print) {
             self.print_statement();
+        } else if self.match_token(Kind::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expr_statement();
+        }
+    }
+
+    fn block(&mut self) {
+        while !self.check(Kind::RightBrace) && !self.check(Kind::EOF) {
+            self.declaration();
+        }
+        self.consume(Kind::RightBrace, "Expect '}' after block.");
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth
+        {
+            self.emit_opcode(OpCode::Pop);
+            self.locals.pop(); // discard this value.
         }
     }
 
@@ -316,9 +378,51 @@ impl Compiler<'_> {
         }
     }
 
+    /// consumes the identifier token for the variable name, adds its lexeme
+    /// to the chunk’s constant table as a string, and then returns the
+    /// constant table index where it was added
     fn parse_variable(&mut self, err_msg: &'static str) -> usize {
         self.consume(Kind::Identifier, err_msg);
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            // exit the function if in a local scope.
+            return 0;
+        }
         self.identifier_constant(self.parser.previous)
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
+        let name = self.parser.previous;
+
+        // NOTE: search direction here is required to search most
+        // recent declarations.
+        for local in self.locals.iter().rev() {
+            // local.depth < scope depth means the current local is an outer variable
+            // stops search.
+            if local.depth != -1 && local.depth < self.scope_depth {
+                break;
+            }
+
+            if name.lexeme == local.name.lexeme {
+                self.parser
+                    .error("Variable with this name exists in this scope.");
+            }
+        }
+        self.add_local(name);
+    }
+
+    fn add_local(&mut self, token: Token<'src>) {
+        // self.locals[self.local_count as usize] = Some(Local {
+        //     name: token,
+        //     depth: self.scope_depth,
+        // });
+        self.locals.push(Local {
+            name: token,
+            depth: self.scope_depth,
+        });
     }
 
     fn identifier_constant(&mut self, token: Token) -> usize {
