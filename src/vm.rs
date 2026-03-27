@@ -5,7 +5,7 @@ use string_interner::symbol::SymbolU32;
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
-use crate::chunk::OpCode;
+use crate::opcode::OpCode;
 use crate::compiler::Compiler;
 use crate::data_structures::HashTable;
 use crate::data_structures::interner::{self};
@@ -282,7 +282,7 @@ impl VM {
         // Because we have 2 constant-indexing Operands OpConstant and OpConstant24
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
-        match self.read_constant(chunk, self.ip > 255) {
+        match self.read_constant(chunk, self.ip >= chunk.index_const24) {
             Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
         }

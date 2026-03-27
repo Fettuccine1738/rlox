@@ -2,15 +2,13 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
-use std::path::PrefixComponent;
-
 use ::string_interner::symbol::SymbolU32;
 
 use self::parser::Parser;
 use self::scanner::Scanner;
 use self::token::Kind;
 use crate::chunk::Chunk;
-use crate::chunk::OpCode;
+use crate::opcode::OpCode;
 use crate::compiler::token::Token;
 use crate::data_structures::interner::{self};
 use crate::value::Value;
@@ -114,6 +112,10 @@ impl<'src> Compiler<'_, 'src> {
     fn emit_constant(&mut self, value: Value) {
         let index: usize = self.chunk.add_constant(value);
         // emits the opcode and its byte operand (the index of the value in the constants array.)
+        if self.chunk.index_const24 == std::usize::MAX && index > 255 {
+            self.chunk.save_index();
+        }
+
         self.emit_opcode_operand(
             if index > 255 {
                 OpCode::Constant24

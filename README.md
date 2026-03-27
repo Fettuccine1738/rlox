@@ -226,6 +226,6 @@ The disassembler prints annotated bytecode to stdout during compilation (enabled
 - `OpCode::Not` is missing a disassembly branch (currently `todo!()` in `Chunk::disassemble_instruction`).
 - `run-length encoding` for line number storage is not yet implemented (tracked in `todo.txt`).
 - The REPL loop in `main.rs` is stubbed — `interpret()` calls `todo!()`.
-- `read_string` in the VM uses `self.ip > 255` as a heuristic to detect long constants, which is incorrect for all cases.
+- `read_string` in the VM uses `self.ip >= chunk.index_const24` as a heuristic to detect long constants, which is incorrect for some cases.
 - `HashTable` panics if full (no automatic resize / rehashing).
 - String support via `Value::Object(HeapAllocatedObj::String)` is partially kept but superseded by `Value::String(SymbolU32)` — the `Object` variant and `HeapAllocatedObj` can be removed.
