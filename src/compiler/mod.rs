@@ -240,9 +240,82 @@ impl<'src> Compiler<'_, 'src> {
             self.begin_scope();
             self.block();
             self.end_scope();
+        } else if self.match_token(Kind::If) {
+            self.if_statement();
         } else {
             self.expr_statement();
         }
+    }
+
+    // NOTE: statments have zero stack effect i.e do not leave values on the stack. 
+    fn if_statement(&mut self) {
+        self.consume(Kind::LeftParen, "Expect '(' after 'if'.");
+        self.expression(); // compile the condition expression, leaving it on the stack.
+        self.consume(Kind::RightParen, "Expect ')' after 'if'.");
+
+        let then_jump: usize = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_opcode(OpCode::Pop); // if the condition is true, pop before compiling the then block. 
+        self.statement();
+
+        // the else jump is unconditional: It jumps to the next stmt after the else branch.
+        let else_jump: usize = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(then_jump);
+        self.emit_opcode(OpCode::Pop); // pop the condition before the else branch.
+        if self.match_token(Kind::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
+    // the 'lhs' of the expression has been compiled with its value on the stack.  
+    // if the value is false the entire and must be false and the 'rhs' is skipped.o
+    // otherwise we discard the lhs and evaluate the rhs as the result of the whole and expression.
+    // (lhs: Value on stack) [OP_JUMP_IF_FALSE, OP_POP] (rhs: not yet compiled.) {end_jump + vm.ip : jumps here after if lhs is false} 
+    //                      ^(current)         (if value is true: pop lhs off the stack and evaluate rhs as final)
+    fn and(&mut self, can_assign: bool) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_opcode(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, can_assign: bool) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_opcode(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(end_jump);
+    }
+
+    // returns the index where the  (operand to the OpCode)
+    // which is how much to offset the instruction ptr
+    // i.e how many bytes of code to skip. 
+    fn emit_jump(&mut self, instruction: OpCode) -> usize {
+        self.emit_opcode(instruction);
+        // placeholder operand for the jump offset.
+        // 16-bit offset to jump over 65,535 bytes of code. 
+        self.emit_byte(0xFF);
+        self.emit_byte(0xFF);
+        self.chunk.code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        // - 2 to adjust for the bytecode for the jump offset itself. 
+        // jump is how many bytecodes have been generated since we consumed the if stmt.
+        let jump = self.chunk.code.len() - 2 - offset;
+
+        if jump as u16 > std::u16::MAX {
+            self.parser.error("Too much code to jump over.");
+        }
+
+        let jump = jump as u32;
+        // little-endian 
+        self.chunk.code[offset] =  (jump & 0xFF) as u8;
+        self.chunk.code[offset + 1] =  (jump >> 8) as u8;
     }
 
     fn block(&mut self) {
@@ -576,6 +649,14 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::Identifier as u8) as usize] = ParseRule::new_prefix(
         |compiler, can_assign| compiler.variable(can_assign),
         Precedence::None,
+    );
+    rules[(Kind::And as u8) as usize] = ParseRule::new_infix(
+        |compiler, can_assign| compiler.and(can_assign),
+        Precedence::And,
+    );
+    rules[(Kind::Or as u8) as usize] = ParseRule::new_infix(
+        |compiler, can_assign| compiler.and(can_assign),
+        Precedence::Or,
     );
     rules
 };

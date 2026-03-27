@@ -29,6 +29,8 @@ pub enum OpCode {
     GetLocal = 20,
     SetLocal = 21,
     PopN = 22,
+    JumpIfFalse = 23,
+    Jump = 24,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -74,6 +76,8 @@ impl TryFrom<u8> for OpCode {
             20 => Ok(Self::GetLocal),
             21 => Ok(Self::SetLocal),
             22 => Ok(Self::PopN),
+            23 => Ok(Self::JumpIfFalse),
+            24 => Ok(Self::Jump),
             _ => Err(()),
         }
     }
@@ -89,8 +93,7 @@ pub struct Line(pub u32);
 
 #[derive(Debug)]
 pub struct Chunk {
-    pub code: Vec<u8>, // uint8(bits)_t
-    // if constants.len() > 255, this means
+    pub code: Vec<u8>,
     pub constants: Vec<Value>,
     pub lines: Vec<Line>,
 }
@@ -178,12 +181,24 @@ impl Chunk {
             OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
             OpCode::PopN => chunk.constant_instruction("OP_SET_GLOBAL", offset),
+            OpCode::GetLocal => chunk.constant_instruction("OP_GET_LOCAL", offset),
+            OpCode::SetLocal => chunk.constant_instruction("OP_SET_LOCAL", offset),
+            OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
+            OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
         }
     }
 
     fn simple_instruction(name: &str, offset: usize) -> usize {
         println!("   {name}");
         offset + 1
+    }
+
+    fn jump_instruction(&self, name: &str, sign: u32, offset: usize) -> usize {
+        let b8_15 = self.code[offset + 2] as u32;
+        let jump = self.code[offset + 1] as u32 | (b8_15 << 8);
+        print!("   {name}\t");
+        println!("{offset:4} {}", (offset as u32 + 3 + sign * jump));
+        offset + 3
     }
 
     // TODO: fix this, compare with impl in the book!
@@ -265,5 +280,9 @@ impl Chunk {
         let bits16 = ((bits >> 16) & 0xFF) as u8;
 
         (bits0_7, bits8_15, bits16)
+    }
+
+    pub fn bcode_len(&self) -> usize {
+        self.code.len()
     }
 }

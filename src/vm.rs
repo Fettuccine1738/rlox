@@ -207,6 +207,16 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                OpCode::JumpIfFalse => {
+                    let offset = self.read_short(chunk);
+                    if self.peek(0).is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
+                OpCode::Jump => {
+                    let offset = self.read_short(chunk);
+                    self.ip += offset as usize;
+                }
                 _ => todo!(),
             }
         }
@@ -237,6 +247,15 @@ impl VM {
             .get(index as usize)
             .expect("Invalid constant index.")
             .clone()
+    }
+
+    // reads the 16 bit operand for jump opCodes
+    // retrurns a u16
+    fn read_short(&mut self, chunk: &Chunk) -> u16 {
+        // le order 
+        let b0_7 = self.read_byte(chunk) as u16;
+        let b8_15 = self.read_byte(chunk) as u16;
+        b0_7 | b8_15 << 8 
     }
 
     fn read_byte(&mut self, chunk: &Chunk) -> u8 {
