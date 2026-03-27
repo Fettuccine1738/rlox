@@ -31,6 +31,7 @@ pub enum OpCode {
     PopN = 22,
     JumpIfFalse = 23,
     Jump = 24,
+    Loop = 25,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -185,6 +186,7 @@ impl Chunk {
             OpCode::SetLocal => chunk.constant_instruction("OP_SET_LOCAL", offset),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
+            OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
         }
     }
 
@@ -193,11 +195,11 @@ impl Chunk {
         offset + 1
     }
 
-    fn jump_instruction(&self, name: &str, sign: u32, offset: usize) -> usize {
+    fn jump_instruction(&self, name: &str, sign: i32, offset: usize) -> usize {
         let b8_15 = self.code[offset + 2] as u32;
         let jump = self.code[offset + 1] as u32 | (b8_15 << 8);
         print!("   {name}\t");
-        println!("{offset:4} {}", (offset as u32 + 3 + sign * jump));
+        println!("{offset:4} {}", (offset as i32 + 3 + sign * jump as i32));
         offset + 3
     }
 
@@ -280,9 +282,5 @@ impl Chunk {
         let bits16 = ((bits >> 16) & 0xFF) as u8;
 
         (bits0_7, bits8_15, bits16)
-    }
-
-    pub fn bcode_len(&self) -> usize {
-        self.code.len()
     }
 }

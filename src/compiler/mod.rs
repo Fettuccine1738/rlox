@@ -2,6 +2,8 @@ pub mod parser;
 pub mod scanner;
 pub mod token;
 
+use std::path::PrefixComponent;
+
 use ::string_interner::symbol::SymbolU32;
 
 use self::parser::Parser;
@@ -242,9 +244,44 @@ impl<'src> Compiler<'_, 'src> {
             self.end_scope();
         } else if self.match_token(Kind::If) {
             self.if_statement();
+        } else if self.match_token(Kind::While) {
+            self.while_statement();
         } else {
             self.expr_statement();
         }
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.count(); // jump all the way back to here if condition is true
+        self.consume(Kind::LeftParen, "Expect '(' after 'while'.");
+        self.expression();
+        self.consume(Kind::LeftParen, "Expect ')' after condition.");
+
+        // exit_jump is dummy location to jump to outside the while loop
+        // while true { block } (jump here.)
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_opcode(OpCode::Pop); // pops the condition of the stack 
+        self.statement();
+        // backward loop after boy is executed.
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump); // update correct location to goto.
+        self.emit_opcode(OpCode::Pop);
+    }
+
+    fn emit_loop(&mut self, start: usize) {
+        self.emit_opcode(OpCode::Loop);
+
+        let offset = self.count() - start + 2;
+        if offset as u16 > std::u16::MAX {
+            self.parser.error("Loop body too large.");
+        }
+        self.emit_byte((offset & 0xff) as u8);
+        self.emit_byte(((offset >> 8)  & 0xff) as u8);
+    }
+
+    fn count(&self) -> usize {
+        self.chunk.code.len()
     }
 
     // NOTE: statments have zero stack effect i.e do not leave values on the stack. 
@@ -300,13 +337,13 @@ impl<'src> Compiler<'_, 'src> {
         // 16-bit offset to jump over 65,535 bytes of code. 
         self.emit_byte(0xFF);
         self.emit_byte(0xFF);
-        self.chunk.code.len() - 2
+        self.count() - 2
     }
 
     fn patch_jump(&mut self, offset: usize) {
         // - 2 to adjust for the bytecode for the jump offset itself. 
         // jump is how many bytecodes have been generated since we consumed the if stmt.
-        let jump = self.chunk.code.len() - 2 - offset;
+        let jump = self.count() - 2 - offset;
 
         if jump as u16 > std::u16::MAX {
             self.parser.error("Too much code to jump over.");
