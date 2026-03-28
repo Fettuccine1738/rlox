@@ -11,7 +11,9 @@ pub mod test {
     // Not a real test, just to walk through the implementation so far.
     #[test]
     pub(super) fn tests_simple_arithmetic_op() {
-        let source = "5 - 4";
+        // this also tests that a single '5' is stored in the constants pool.
+        // debug outputs should show 2 constants saved 5 and 4.
+        let source = "5 - 4 + 5;";
         let mut ch: Chunk = Chunk::new();
         let success: bool = Compiler::compile(source, &mut ch);
         assert!(success);
@@ -34,21 +36,22 @@ pub mod test {
         assert_eq!(vm.compile(source.to_owned()), InterpretResult::CompileError)
     }
 
+    // Compilation should be successful.
     #[test]
     fn tests_runtime_error() {
         let source = "1 + nil;";
         let mut vm = vm::VM::new();
-        // NOTE: Do not compile directly with the VM.
         assert_eq!(
             vm.interpret(source.to_owned()),
             InterpretResult::RuntimeError
         )
     }
 
+    // really annoying to append ';' to simple expressions. 
     #[test]
     fn tests_string_concatenation() {
         let mut ch: Chunk = Chunk::new();
-        assert!(Compiler::compile("\"st\" + \"ring\"", &mut ch));
+        assert!(Compiler::compile("\"st\" + \"ring\";", &mut ch));
     }
 
     #[test]

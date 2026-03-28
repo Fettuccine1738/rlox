@@ -124,9 +124,10 @@ impl VM {
                 OpCode::Add | OpCode::Divide | OpCode::Multiply | OpCode::Subtract => {
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
-                    let result =
-                        Self::binary_op(lhs, rhs, instruction).ok_or(InterpretResult::RuntimeError);
-                    self.stack.push(result.unwrap());
+                    match Self::binary_op(lhs, rhs, instruction) {
+                        Some(result) => self.stack.push(result),
+                        None => return InterpretResult::RuntimeError
+                    }
                 }
                 OpCode::NIL => {
                     self.stack.push(Value::Nil);
@@ -207,7 +208,6 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
-                // TODO: test correctness of these 2 instruction 
                 OpCode::GetLocal => {
                     let slot = self.read_byte(chunk);
                     self.push_value(self.stack[slot as usize].clone());

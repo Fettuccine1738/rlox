@@ -164,7 +164,7 @@ impl Chunk {
     // constants have an additional operand the index in the constants buffer;
     // 1 or 3 byte is used up depending on the byte_code.
     pub fn write_constant(&mut self, value: Value, line: u32) {
-        let idx = self.add_constant(value);
+        let idx = self.add_if_absent(value);
         // if the index of stored constant is > 256, we use the OP_CONSTANT_LONG
         if idx < 256 {
             self.code.push(OpCode::Constant as u8);

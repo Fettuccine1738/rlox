@@ -110,8 +110,10 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let index: usize = self.chunk.add_constant(value);
         // emits the opcode and its byte operand (the index of the value in the constants array.)
+        let index: usize = self.chunk.add_if_absent(value);
+        // this lets us record the index that triggers the use of OpCode::Constant24, where reading 3 bytes 
+        // must be read to get the index of a constant from the constant pool.
         if self.chunk.index_const24 == std::usize::MAX && index > 255 {
             self.chunk.save_index();
         }
