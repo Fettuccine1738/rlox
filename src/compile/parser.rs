@@ -1,6 +1,6 @@
-use crate::compiler::scanner::Scanner;
-use crate::compiler::token::Kind;
-use crate::compiler::token::Token;
+use crate::compile::scanner::Scanner;
+use crate::compile::token::Kind;
+use crate::compile::token::Token;
 
 #[derive(Debug)]
 pub struct Parser<'src> {

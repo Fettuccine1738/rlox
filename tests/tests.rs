@@ -1,10 +1,10 @@
 #[cfg(test)]
 pub mod test {
     use rlox::{
-        chunk::Chunk,
-        compiler::Compiler,
-        opcode::OpCode,
-        value::Value,
+        core::chunk::Chunk,
+        compile::compiler::Compiler,
+        core::opcode::OpCode,
+        core::value::Value,
         vm::{self, InterpretResult},
     };
 

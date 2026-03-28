@@ -1,17 +1,13 @@
-pub mod parser;
-pub mod scanner;
-pub mod token;
-
 use ::string_interner::symbol::SymbolU32;
 
-use self::parser::Parser;
-use self::scanner::Scanner;
-use self::token::Kind;
-use crate::chunk::Chunk;
-use crate::compiler::token::Token;
+use super::parser::Parser;
+use super::scanner::Scanner;
+use super::token::Kind;
+use crate::core::chunk::Chunk;
+use crate::compile::token::Token;
 use crate::data_structures::interner::{self};
-use crate::opcode::OpCode;
-use crate::value::Value;
+use crate::core::opcode::OpCode;
+use crate::core::value::Value;
 
 #[derive(Debug)]
 pub struct Local<'src> {

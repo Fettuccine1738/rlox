@@ -4,12 +4,12 @@ use std::ops::{Add, Div, Mul, Sub};
 use string_interner::symbol::SymbolU32;
 
 //------------Virtual-machine
-use crate::chunk::Chunk;
-use crate::compiler::Compiler;
-use crate::data_structures::HashTable;
+use crate::core::chunk::Chunk;
+use crate::compile::compiler::Compiler;
+use crate::data_structures::map::HashTable;
 use crate::data_structures::interner::{self};
-use crate::opcode::OpCode;
-use crate::value::Value;
+use crate::core::opcode::OpCode;
+use crate::core::value::Value;
 
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;

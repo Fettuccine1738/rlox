@@ -1,4 +1,4 @@
-use crate::{data_structures::interner, opcode::*, value::Value};
+use crate::{data_structures::interner, core::opcode::*, core::value::Value};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Line(pub u32);
 

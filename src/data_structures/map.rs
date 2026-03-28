@@ -1,6 +1,6 @@
 use string_interner::{Symbol, symbol::SymbolU32};
 
-use crate::value::Value;
+use crate::core::value::Value;
 use std::{fmt::Debug};
 
 // #[derive(Debug)]
