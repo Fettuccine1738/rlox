@@ -89,11 +89,11 @@ impl Display for Value {
         match &self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
-            Value::Nil => write!(f, "{}", *self),
+            Value::Nil => write!(f, "NIL"),
             Value::Object(o) => write!(f, "{}", o),
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
-                write!(f, "{}", s)
+                write!(f, ":{}", s)
             }
             _ => todo!(),
         }

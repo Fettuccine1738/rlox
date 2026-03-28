@@ -94,18 +94,26 @@ impl HashTable {
         }
     }
 
-    fn find_entry_mut(&mut self, key: SymbolU32) -> &mut Option<Entry<SymbolU32, Value>> {
-        let index = self.get_key_index(key);
-        &mut self.entries[index]
+    // eeewwwww
+    fn find_entry_mut(&mut self, key: SymbolU32) -> Option<&mut Option<Entry<SymbolU32, Value>>> {
+        match self.get_key_index(key) {
+            Some(index) => Some(&mut self.entries[index]),
+            None => None,
+        }
     }
 
     fn find_entry(&self, key: SymbolU32) -> &Option<Entry<SymbolU32, Value>> {
-        let index = self.get_key_index(key);
-        &self.entries[index]
+        match self.get_key_index(key) {
+            Some(index) => &self.entries[index],
+            None => &None,
+        }
     }
 
-    fn get_key_index(&self, key: SymbolU32) -> usize {
+    // checks if key exists.
+    fn get_key_index(&self, key: SymbolU32) -> Option<usize> {
         let len = self.entries.len();
+        // NOTE: instead of hashing SymbolU32 are already unique.
+        // we can use them as hashed ids of the strings interned.
         let start: usize = key.to_usize() % len;
         let mut index = start;
         loop {
@@ -117,20 +125,35 @@ impl HashTable {
 
             // probe sequence.
             if index == start {
-                panic!("hashmap is full!.")
+                return None;
             }
         }
-        index
+        Some(index)
     }
 
     pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
-        let entry = self.find_entry_mut(key);
-        let prev = std::mem::replace(entry, Some(Entry { key: key, value: v }));
-        if prev.is_none() {
-            self.len += 1;
-            true
-        } else {
-            false
+        if self.entries.is_empty() {
+            self.entries.push(Some(Entry { key: key, value: v }));
+            return true;
+        }
+
+        match self.find_entry_mut(key) {
+            // some entry is found, value has to be replaced.
+            Some(option) if option.is_some() => {
+                let prev = std::mem::replace(option, Some(Entry { key: key, value: v }));
+                if prev.is_none() {
+                    self.len += 1;
+                    true
+                } else {
+                    false
+                }
+            }
+            None => {
+                self.entries.push(Some(Entry { key: key, value: v }));
+                return true;
+            },
+            // this case should never exist.
+            Some(_) => false,
         }
     }
 
@@ -162,21 +185,24 @@ impl HashTable {
             return None;
         }
         let len = self.entries.len();
-        let index = self.get_key_index(key);
-        // std::mem::replace(&mut self.entries[index], None)
-        let removed = self.entries[index].take();
-        if removed.is_some() {
-            self.len -= 1;
+        match self.get_key_index(key) {
+            None => None,
+            Some(index) => {
+                // std::mem::replace(&mut self.entries[index], None)
+                let removed: Option<Entry<SymbolU32, Value>> = self.entries[index].take();
+                if removed.is_some() {
+                    self.len -= 1;
 
-            // rehash all entries following the deleted slot.
-            let mut i = (index + 1) % len;
-            while let Some(entry) = self.entries[i].take() {
-                self.insert(entry.key, entry.value);
-                i = (i + 1) % len;
+                    // rehash all entries following the deleted slot.
+                    let mut i = (index + 1) % len;
+                    while let Some(entry) = self.entries[i].take() {
+                        self.insert(entry.key, entry.value);
+                        i = (i + 1) % len;
+                    }
+                }
+                removed
             }
         }
-
-        removed
     }
 
     pub fn contains_key<T>(_key: T) -> bool {

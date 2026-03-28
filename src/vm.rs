@@ -5,10 +5,10 @@ use string_interner::symbol::SymbolU32;
 
 //------------Virtual-machine
 use crate::chunk::Chunk;
-use crate::opcode::OpCode;
 use crate::compiler::Compiler;
 use crate::data_structures::HashTable;
 use crate::data_structures::interner::{self};
+use crate::opcode::OpCode;
 use crate::value::Value;
 
 // use crate::lox_errors::VmError;
@@ -96,20 +96,20 @@ impl VM {
             println!("debuging {}", instruction);
 
             match instruction {
-                // OpCode::Return => {
-                //     if let Some(v) = self.stack.pop() {
-                //         println!("{}", v);
-                //     }
-                //     return InterpretResult::Ok;
-                // }
+                OpCode::Return => {
+                    if let Some(v) = self.stack.pop() {
+                        println!("{}", v);
+                    }
+                    return InterpretResult::Ok;
+                }
                 OpCode::Constant => {
                     let constant: Value = self.read_constant(chunk, false);
-                    println!("{:?}", constant);
+                    println!("{}", constant);
                     self.stack.push(constant); // self.push_value(constant)
                 }
                 OpCode::Constant24 => {
                     let constant: Value = self.read_constant(chunk, true);
-                    println!("{:?}", constant);
+                    println!("{}", constant);
                     self.stack.push(constant);
                 }
                 OpCode::Negate => {
@@ -126,7 +126,7 @@ impl VM {
                     let lhs = self.stack.pop().unwrap();
                     match Self::binary_op(lhs, rhs, instruction) {
                         Some(result) => self.stack.push(result),
-                        None => return InterpretResult::RuntimeError
+                        None => return InterpretResult::RuntimeError,
                     }
                 }
                 OpCode::NIL => {
@@ -156,8 +156,8 @@ impl VM {
                     self.stack.push(Value::Boolean(eq));
                 }
                 OpCode::Print => {
-                    let value = self.stack.pop();
-                    println!("{:?}", value);
+                    let value = self.stack.pop().unwrap();
+                    println!("{}", value);
                 }
                 OpCode::Pop => {
                     // used for expression stmts to evaluate an expression and
@@ -266,10 +266,10 @@ impl VM {
     // reads the 16 bit operand for jump opCodes
     // retrurns a u16
     fn read_short(&mut self, chunk: &Chunk) -> u16 {
-        // le order 
+        // le order
         let b0_7 = self.read_byte(chunk) as u16;
         let b8_15 = self.read_byte(chunk) as u16;
-        b0_7 | b8_15 << 8 
+        b0_7 | b8_15 << 8
     }
 
     fn read_byte(&mut self, chunk: &Chunk) -> u8 {

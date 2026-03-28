@@ -1,4 +1,4 @@
-use crate::{data_structures::interner, value::Value, opcode::*};
+use crate::{data_structures::interner, opcode::*, value::Value};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Line(pub u32);
 
@@ -15,8 +15,8 @@ pub struct Chunk {
     // index_const24 records the size of the bytecode array when the constants pool
     // exceeds 255 (the value at which Constant24 must be used as the operand to store and read constants.)
     // this allows the compiler & vm to compare the instruction ptr with this size
-    // if the ip is >= index_const24 we have to read the next 3 bytes to get the correct index. 
-    pub index_const24: usize, 
+    // if the ip is >= index_const24 we have to read the next 3 bytes to get the correct index.
+    pub index_const24: usize,
 }
 
 impl Chunk {

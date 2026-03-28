@@ -1,9 +1,9 @@
 #[cfg(test)]
 pub mod test {
     use rlox::{
-        chunk::{Chunk},
-        opcode::{OpCode},
+        chunk::Chunk,
         compiler::Compiler,
+        opcode::OpCode,
         value::Value,
         vm::{self, InterpretResult},
     };
@@ -47,11 +47,23 @@ pub mod test {
         )
     }
 
-    // really annoying to append ';' to simple expressions. 
+    // really annoying to append ';' to simple expressions.
     #[test]
     fn tests_string_concatenation() {
         let mut ch: Chunk = Chunk::new();
         assert!(Compiler::compile("\"st\" + \"ring\";", &mut ch));
+    }
+
+    #[test]
+    fn tests_string_concatenation_exec() {
+        let _src = "var b = \"beignets\"; \n\
+                         var beverage = \"capuccino\"; \n\
+                         var breakfast = \"beignets with \"+ beverage; \n\
+                         print breakfast;";
+        assert_eq!(
+            vm::VM::new().interpret(_src.to_owned()),
+            InterpretResult::Ok
+        )
     }
 
     #[test]

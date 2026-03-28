@@ -8,9 +8,9 @@ use self::parser::Parser;
 use self::scanner::Scanner;
 use self::token::Kind;
 use crate::chunk::Chunk;
-use crate::opcode::OpCode;
 use crate::compiler::token::Token;
 use crate::data_structures::interner::{self};
+use crate::opcode::OpCode;
 use crate::value::Value;
 
 #[derive(Debug)]
@@ -112,7 +112,7 @@ impl<'src> Compiler<'_, 'src> {
     fn emit_constant(&mut self, value: Value) {
         // emits the opcode and its byte operand (the index of the value in the constants array.)
         let index: usize = self.chunk.add_if_absent(value);
-        // this lets us record the index that triggers the use of OpCode::Constant24, where reading 3 bytes 
+        // this lets us record the index that triggers the use of OpCode::Constant24, where reading 3 bytes
         // must be read to get the index of a constant from the constant pool.
         if self.chunk.index_const24 == std::usize::MAX && index > 255 {
             self.chunk.save_index();
@@ -206,7 +206,8 @@ impl<'src> Compiler<'_, 'src> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if *name == local.name {
                 if local.depth == -1 {
-                    self.parser.error("Can't read local variable in its own initializer.");
+                    self.parser
+                        .error("Can't read local variable in its own initializer.");
                 }
                 return Some(idx);
             }
@@ -298,7 +299,7 @@ impl<'src> Compiler<'_, 'src> {
                 self.patch_jump(jump);
                 self.emit_opcode(OpCode::Pop);
             }
-            _ => ()
+            _ => (),
         }
 
         if !self.match_token(Kind::RightParen) {
@@ -315,7 +316,6 @@ impl<'src> Compiler<'_, 'src> {
         self.statement();
         self.end_scope();
     }
-
 
     fn while_statement(&mut self) {
         let loop_start = self.count(); // jump all the way back to here if condition is true
@@ -343,14 +343,14 @@ impl<'src> Compiler<'_, 'src> {
             self.parser.error("Loop body too large.");
         }
         self.emit_byte((offset & 0xff) as u8);
-        self.emit_byte(((offset >> 8)  & 0xff) as u8);
+        self.emit_byte(((offset >> 8) & 0xff) as u8);
     }
 
     fn count(&self) -> usize {
         self.chunk.code.len()
     }
 
-    // NOTE: statments have zero stack effect i.e do not leave values on the stack. 
+    // NOTE: statments have zero stack effect i.e do not leave values on the stack.
     fn if_statement(&mut self) {
         self.consume(Kind::LeftParen, "Expect '(' after 'if'.");
         self.expression(); // compile the condition expression, leaving it on the stack.
@@ -371,10 +371,10 @@ impl<'src> Compiler<'_, 'src> {
         self.patch_jump(else_jump);
     }
 
-    // the 'lhs' of the expression has been compiled with its value on the stack.  
+    // the 'lhs' of the expression has been compiled with its value on the stack.
     // if the value is false the entire and must be false and the 'rhs' is skipped.o
     // otherwise we discard the lhs and evaluate the rhs as the result of the whole and expression.
-    // (lhs: Value on stack) [OP_JUMP_IF_FALSE, OP_POP] (rhs: not yet compiled.) {end_jump + vm.ip : jumps here after if lhs is false} 
+    // (lhs: Value on stack) [OP_JUMP_IF_FALSE, OP_POP] (rhs: not yet compiled.) {end_jump + vm.ip : jumps here after if lhs is false}
     //                      ^(current)         (if value is true: pop lhs off the stack and evaluate rhs as final)
     fn and(&mut self, can_assign: bool) {
         let end_jump = self.emit_jump(OpCode::JumpIfFalse);
@@ -396,18 +396,18 @@ impl<'src> Compiler<'_, 'src> {
 
     // returns the index where the  (operand to the OpCode)
     // which is how much to offset the instruction ptr
-    // i.e how many bytes of code to skip. 
+    // i.e how many bytes of code to skip.
     fn emit_jump(&mut self, instruction: OpCode) -> usize {
         self.emit_opcode(instruction);
         // placeholder operand for the jump offset.
-        // 16-bit offset to jump over 65,535 bytes of code. 
+        // 16-bit offset to jump over 65,535 bytes of code.
         self.emit_byte(0xFF);
         self.emit_byte(0xFF);
         self.count() - 2
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        // - 2 to adjust for the bytecode for the jump offset itself. 
+        // - 2 to adjust for the bytecode for the jump offset itself.
         // jump is how many bytecodes have been generated since we consumed the if stmt.
         let jump = self.count() - 2 - offset;
 
@@ -416,9 +416,9 @@ impl<'src> Compiler<'_, 'src> {
         }
 
         let jump = jump as u32;
-        // little-endian 
-        self.chunk.code[offset] =  (jump & 0xFF) as u8;
-        self.chunk.code[offset + 1] =  (jump >> 8) as u8;
+        // little-endian
+        self.chunk.code[offset] = (jump & 0xFF) as u8;
+        self.chunk.code[offset + 1] = (jump >> 8) as u8;
     }
 
     fn block(&mut self) {
