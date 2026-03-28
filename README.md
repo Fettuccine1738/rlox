@@ -163,27 +163,30 @@ static RULES: [ParseRule; 40] = {
 ---
 
 ## Project Structure
-
 ```
 src/
 ├── main.rs                    — entry point / REPL stub
 ├── lib.rs                     — crate root, module declarations
-├── chunk.rs                   — Chunk, OpCode, bytecode helpers
-├── value.rs                   — Value enum, arithmetic operator impls
 ├── vm.rs                      — VM, interpreter loop, InterpretResult
-├── lox_errors.rs              — VmError type
-├── compiler/
-│   ├── mod.rs                 — Compiler, Pratt parser, ParseRule table
+├── core/
+│   ├── mod.rs                 — module declarations
+│   ├── chunk.rs               — Chunk, bytecode helpers
+│   ├── opcode.rs              — OpCode definitions
+│   ├── value.rs               — Value enum, arithmetic operator impls
+│   └── lox_errors.rs          — VmError type
+├── compile/
+│   ├── mod.rs                 — module declarations
+│   ├── compiler.rs            — Compiler, Pratt parser, ParseRule table
 │   ├── parser.rs              — Parser, error reporting
 │   ├── scanner.rs             — Scanner / lexer
 │   └── token.rs               — Token, Kind enum
 └── data_structures/
-    ├── mod.rs                 — HashTable (open addressing)
+    ├── mod.rs                 — module declarations
+    ├── map.rs                 — HashTable (open addressing)
     └── interner.rs            — Global StringInterner wrapper
 tests/
 └── tests.rs                   — Integration tests
 ```
-
 ---
 
 ## Building & Running
