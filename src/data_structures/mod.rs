@@ -3,7 +3,7 @@ pub mod interner;
 use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::value::Value;
-use std::fmt::Debug;
+use std::{fmt::Debug};
 
 // #[derive(Debug)]
 // pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
@@ -32,6 +32,13 @@ pub struct HashTable {
 pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
     key: K,
     value: V,
+}
+
+#[derive(Debug)]
+enum ProbeResult {
+    Found(usize), // key exists at this index
+    Empty(usize), // key is absent, but we can insert here. Likely that original slot was taken 
+    Full, // table is full, need to grow
 }
 
 //--------------utils---------------------------
@@ -94,23 +101,20 @@ impl HashTable {
         }
     }
 
-    // eeewwwww
     fn find_entry_mut(&mut self, key: SymbolU32) -> Option<&mut Option<Entry<SymbolU32, Value>>> {
-        match self.get_key_index(key) {
-            Some(index) => Some(&mut self.entries[index]),
-            None => None,
-        }
+        // match self.get_key_index(key) {
+        //     ProbeResult::Found(index) => Some(&mut self.entries[index]),
+        //     _ => None,
+        // }
+        todo!("Not implemented yet.")
     }
 
     fn find_entry(&self, key: SymbolU32) -> &Option<Entry<SymbolU32, Value>> {
-        match self.get_key_index(key) {
-            Some(index) => &self.entries[index],
-            None => &None,
-        }
+        todo!("Not implemented yet.")
     }
 
     // checks if key exists.
-    fn get_key_index(&self, key: SymbolU32) -> Option<usize> {
+    fn get_key_index(&self, key: SymbolU32) -> ProbeResult {
         let len = self.entries.len();
         // NOTE: instead of hashing SymbolU32 are already unique.
         // we can use them as hashed ids of the strings interned.
@@ -118,42 +122,41 @@ impl HashTable {
         let mut index = start;
         loop {
             match &self.entries[index] {
-                Some(entry) if entry.key == key => break, //return &mut self.entries[index],
-                None => break, //  return &mut self.entries[index], // stop probing
+                Some(entry) if entry.key == key => return ProbeResult::Found(index), //return &mut self.entries[index],
+                None => return ProbeResult::Empty(index), 
                 _ => index = (index + 1) % len,
             }
 
             // probe sequence.
             if index == start {
-                return None;
+                return ProbeResult::Full;
             }
         }
-        Some(index)
     }
 
+    // returns true if no previous entry existed.
     pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
+        let entry = Some(Entry { key: key, value: v });
         if self.entries.is_empty() {
-            self.entries.push(Some(Entry { key: key, value: v }));
+            self.entries.push(entry);
             return true;
         }
 
-        match self.find_entry_mut(key) {
-            // some entry is found, value has to be replaced.
-            Some(option) if option.is_some() => {
-                let prev = std::mem::replace(option, Some(Entry { key: key, value: v }));
-                if prev.is_none() {
-                    self.len += 1;
-                    true
-                } else {
-                    false
-                }
+        match self.get_key_index(key) {
+            ProbeResult::Empty(index) => {
+                self.entries[index] = entry;
+                false
             }
-            None => {
-                self.entries.push(Some(Entry { key: key, value: v }));
-                return true;
-            },
-            // this case should never exist.
-            Some(_) => false,
+            ProbeResult::Found(index) => {
+                self.entries[index] = entry;
+                self.len += 1;
+                true
+            }
+            ProbeResult::Full => {
+                self.entries.push(entry);
+                self.len += 1;
+                true
+            }
         }
     }
 
@@ -186,8 +189,8 @@ impl HashTable {
         }
         let len = self.entries.len();
         match self.get_key_index(key) {
-            None => None,
-            Some(index) => {
+            ProbeResult::Empty(_) | ProbeResult::Full => None, // there is nothing to remove 
+            ProbeResult::Found(index) => {
                 // std::mem::replace(&mut self.entries[index], None)
                 let removed: Option<Entry<SymbolU32, Value>> = self.entries[index].take();
                 if removed.is_some() {
@@ -205,8 +208,11 @@ impl HashTable {
         }
     }
 
-    pub fn contains_key<T>(_key: T) -> bool {
-        todo!()
+    pub fn contains_key(&self, key: SymbolU32) -> bool {
+        match self.get_key_index(key) {
+            ProbeResult::Found(_) => true,
+            _ => false
+        }
     }
 }
 
