@@ -107,8 +107,8 @@ impl Chunk {
             OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
             OpCode::PopN => chunk.constant_instruction("OP_SET_GLOBAL", offset),
-            OpCode::GetLocal => chunk.constant_instruction("OP_GET_LOCAL", offset),
-            OpCode::SetLocal => chunk.constant_instruction("OP_SET_LOCAL", offset),
+            OpCode::GetLocal => chunk.byte_instruction("OP_GET_LOCAL", offset),
+            OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
@@ -118,6 +118,12 @@ impl Chunk {
     fn simple_instruction(name: &str, offset: usize) -> usize {
         println!("   {name}");
         offset + 1
+    }
+
+    fn byte_instruction(&self, name: &str, offset: usize) -> usize {
+        let slot = self.code[offset + 1];
+        println!("{}s {:04}", name, slot);
+        offset + 2
     }
 
     fn jump_instruction(&self, name: &str, sign: i32, offset: usize) -> usize {

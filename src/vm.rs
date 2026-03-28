@@ -207,6 +207,16 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                // TODO: test correctness of these 2 instruction 
+                OpCode::GetLocal => {
+                    let slot = self.read_byte(chunk);
+                    self.push_value(self.stack[slot as usize].clone());
+                }
+                OpCode::SetLocal => {
+                    let slot = self.read_byte(chunk);
+                    self.stack[slot as usize] = self.peek(0);
+                    todo!()
+                }
                 OpCode::JumpIfFalse => {
                     let offset = self.read_short(chunk);
                     if self.peek(0).is_falsey() {

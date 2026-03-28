@@ -16,7 +16,9 @@ use crate::value::Value;
 #[derive(Debug)]
 pub struct Local<'src> {
     name: Token<'src>,
-    depth: i32, // record the scope depth of the where the local var was declared.
+    // record the scope depth of the where the local var was declared.
+    // Sentinel -1 means this local is uninitialized.
+    depth: i32,
 }
 
 // the source string should not be 'static because you don't want to require that
@@ -50,8 +52,6 @@ impl<'src> Compiler<'_, 'src> {
         while !compiler.match_token(Kind::EOF) {
             compiler.declaration();
         }
-        // compiler.expression();
-        // compiler.consume(Kind::EOF, "Expected end of expression.");
 
         compiler.end_compilation();
         !compiler.parser.had_error
@@ -203,6 +203,9 @@ impl<'src> Compiler<'_, 'src> {
     fn resolve_local(&mut self, name: &Token) -> Option<usize> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if *name == local.name {
+                if local.depth == -1 {
+                    self.parser.error("Can't read local variable in its own initializer.");
+                }
                 return Some(idx);
             }
         }
@@ -211,9 +214,18 @@ impl<'src> Compiler<'_, 'src> {
 
     fn define_variable(&mut self, global: usize) {
         if self.scope_depth > 0 {
+            self.mark_initialized();
             return;
         }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);
+    }
+
+    // marks a variable as initialized once it has been defined.
+    // Declared = variable is in an uninitialized state.
+    // Defined = variable is initialized and availble for use.
+    fn mark_initialized(&mut self) {
+        let index = self.locals.len() - 1;
+        self.locals[index].depth = self.scope_depth;
     }
 
     fn synchronize(&mut self) {
@@ -248,10 +260,60 @@ impl<'src> Compiler<'_, 'src> {
             self.if_statement();
         } else if self.match_token(Kind::While) {
             self.while_statement();
+        } else if self.match_token(Kind::For) {
+            self.for_statement();
         } else {
             self.expr_statement();
         }
     }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+        self.consume(Kind::LeftParen, "Expect '(' after 'for'.");
+        if self.match_token(Kind::SemiColon) {
+            // no initializer.
+        } else if self.match_token(Kind::Var) {
+            self.variable_declaration();
+        } else {
+            self.expr_statement();
+        }
+
+        self.consume(Kind::SemiColon, "Expect ';'.");
+        let mut loop_start = self.count();
+        let mut exit_jump: Option<usize> = None;
+
+        if !self.match_token(Kind::SemiColon) {
+            self.expression();
+            self.consume(Kind::SemiColon, "Expect ';' after loop condition.");
+            // jump out of the loop if the condition is false
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
+            self.emit_opcode(OpCode::Pop);
+        }
+
+        self.emit_loop(loop_start);
+        match exit_jump {
+            Some(jump) => {
+                self.patch_jump(jump);
+                self.emit_opcode(OpCode::Pop);
+            }
+            _ => ()
+        }
+
+        if !self.match_token(Kind::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump);
+            let increment_start = self.count();
+            self.expression();
+            self.emit_opcode(OpCode::Pop);
+            self.consume(Kind::RightParen, "Expect ')' after for clauses.");
+            self.emit_loop(loop_start);
+
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+        self.statement();
+        self.end_scope();
+    }
+
 
     fn while_statement(&mut self) {
         let loop_start = self.count(); // jump all the way back to here if condition is true
@@ -527,10 +589,6 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn add_local(&mut self, token: Token<'src>) {
-        // self.locals[self.local_count as usize] = Some(Local {
-        //     name: token,
-        //     depth: self.scope_depth,
-        // });
         self.locals.push(Local {
             name: token,
             depth: self.scope_depth,
@@ -667,7 +725,7 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::Nil as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
     rules[(Kind::Number as u8) as usize] =
-        ParseRule::new_prefix(|compiler, _| compiler.literal(), Precedence::None);
+        ParseRule::new_prefix(|compiler, _| compiler.number(), Precedence::None);
 
     rules[(Kind::Bang as u8) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.unary(), Precedence::None);

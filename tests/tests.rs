@@ -11,7 +11,7 @@ pub mod test {
     // Not a real test, just to walk through the implementation so far.
     #[test]
     pub(super) fn tests_simple_arithmetic_op() {
-        let source = "5 - 4;";
+        let source = "5 - 4";
         let mut ch: Chunk = Chunk::new();
         let success: bool = Compiler::compile(source, &mut ch);
         assert!(success);

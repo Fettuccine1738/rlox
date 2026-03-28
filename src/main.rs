@@ -2,7 +2,6 @@ use std::fs;
 use std::io;
 
 use rlox::vm::InterpretResult;
-use string_interner::StringInterner;
 
 pub fn repl() {
     // let stdin = std::io::stdin();
