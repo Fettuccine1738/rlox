@@ -132,7 +132,7 @@ impl HashTable {
         }
     }
 
-    // returns true if no previous entry existed.
+    // returns true if no previous entry existed. i.e inserted new value.
     pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
         let entry = Some(Entry { key: key, value: v });
         if self.entries.is_empty() {
@@ -143,12 +143,12 @@ impl HashTable {
         match self.get_key_index(key) {
             ProbeResult::Empty(index) => {
                 self.entries[index] = entry;
-                false
+                true
             }
             ProbeResult::Found(index) => {
                 self.entries[index] = entry;
                 self.len += 1;
-                true
+                false
             }
             ProbeResult::Full => {
                 self.entries.push(entry);

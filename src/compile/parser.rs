@@ -57,7 +57,7 @@ impl<'src> Parser<'src> {
         self.error_at(self.current.clone(), message);
     }
 
-    pub fn error(&mut self, message: &'static str) {
+    pub fn error(&mut self, message: &str) {
         // unbelievable this would not work., would Token be valid after this call ??
         // self.error_at(self.previous, message);
         self.error_at(self.previous.clone(), message);

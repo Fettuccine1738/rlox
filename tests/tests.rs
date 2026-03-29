@@ -91,9 +91,30 @@ pub mod test {
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
         //  var boole = !true; \n\
+        assert!(Compiler::compile(_src, &mut chunk));
+    }
+
+    /// tests that a const declared variable should fail 
+    /// at compile time when reassigned to. 
+    /// TODO: possibly allow this but ignore modification.
+    #[test]
+    fn test_constglobal_declaration_notok() {
         let _src2 = "const b = \"cow\"; \n\
                                b = \"co\";";
-        assert!(Compiler::compile(_src2, &mut chunk));
+        assert!(!Compiler::compile(_src2, &mut Chunk::new()))
+    }
+
+
+    /// tests access const global variable compiles successfully.
+    #[test]
+    fn test_constglobal_access_ok() {
+        let mut vm = vm::VM::new();
+        let _src2 = "const foo = \"hello\"; \n\
+                           var bar = \"\"; \n\
+                           bar = foo + \" world.\n\"; \n\
+                           print bar; \n\
+                           print foo;";
+        assert_eq!(vm.interpret(_src2.to_owned()), InterpretResult::Ok);
     }
 
     #[test]

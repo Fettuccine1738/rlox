@@ -130,7 +130,7 @@ impl Add for Value {
                 let r_str = interner::get_string(*rhs);
                 match (l_str, r_str) {
                     (Some(mut l), Some(r)) => {
-                        l.push_str(&r);
+                        l.push_str(&r); // NOTE: we are not consuming rhs.
                         let symbol = interner::intern(&l);
                         Some(Value::String(symbol))
                     }

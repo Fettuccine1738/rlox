@@ -1,6 +1,3 @@
-use std::fmt::format;
-
-use string_interner::symbol;
 use ::string_interner::symbol::SymbolU32;
 
 use super::parser::Parser;
@@ -49,7 +46,7 @@ pub struct Compiler<'a, 'src> {
     parser: Parser<'src>,
     chunk: &'a mut Chunk,
     locals: Vec<Local<'src>>,
-    const_globals: Vec<SymbolU32>,
+    const_globals: Vec<usize>,
     scope_depth: i32, // the number of blocks surrouding the current bit of code being compiled.
                       // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
 }
@@ -215,15 +212,10 @@ impl<'src> Compiler<'_, 'src> {
         };
 
         if can_assign && self.match_token(Kind::Equal) {
-            // compile time check that this variable is i mutable
-            let check = match interner::get_symbol(name.lexeme) {
-                Some(symbol) => {
-                    self.const_globals.contains(&symbol)
-                }
-                None => false,
-            };
-            if check {
-                self.parser.error("Const variable cannot be assigned to.");
+            // compile time check that this slots in the constants pool is immutable
+            if self.const_globals.contains(&arg) {
+                let msg = format!("Const variable `{}` cannot be assigned to.", name.lexeme);
+                self.parser.error(&msg);
                 return;
             }
             self.expression();
@@ -253,6 +245,7 @@ impl<'src> Compiler<'_, 'src> {
         }
         if is_const {
             self.emit_opcode_operand(OpCode::ConstGlobal, global);
+            self.const_globals.push(global); // compiler knows index at this slot is immutable
         } else {
             self.emit_opcode_operand(OpCode::DefineGlobal, global);
         }

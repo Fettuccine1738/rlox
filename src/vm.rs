@@ -169,7 +169,7 @@ impl VM {
                     let n: u8 = self.read_byte(chunk);
                     self.stack.truncate(n as usize);
                 }
-                OpCode::DefineGlobal => {
+                OpCode::DefineGlobal | OpCode::ConstGlobal => {
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string(chunk).unwrap();
                     // NOTE: Value is not popped directly off the stack.
