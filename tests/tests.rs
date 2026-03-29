@@ -73,6 +73,16 @@ pub mod test {
         assert!(Compiler::compile(src, &mut chunk));
     }
 
+    // this should fail.
+    // TODO: force var or const keyword before variable declaration or
+    // keep as it is and implicit Var keyword.
+    #[test]
+    fn test_unnamed_variable_fails_compile() {
+        let mut chunk: Chunk = Chunk::new();
+        let src = "foo = \"bar\";";
+        assert!(Compiler::compile(src, &mut chunk));
+    }
+
     #[test]
     fn tests_global_declaration() {
         let mut chunk: Chunk = Chunk::new();
@@ -81,7 +91,7 @@ pub mod test {
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
         //  var boole = !true; \n\
-        let _src2 = "var b = \"cow\"; \n\
+        let _src2 = "const b = \"cow\"; \n\
                                b = \"co\";";
         assert!(Compiler::compile(_src2, &mut chunk));
     }

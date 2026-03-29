@@ -1,3 +1,6 @@
+use std::fmt::format;
+
+use string_interner::symbol;
 use ::string_interner::symbol::SymbolU32;
 
 use super::parser::Parser;
@@ -15,6 +18,23 @@ pub struct Local<'src> {
     // record the scope depth of the where the local var was declared.
     // Sentinel -1 means this local is uninitialized.
     depth: i32,
+    is_const: bool,
+}
+
+// NOTE: when to name the lifetime when creating impl blocks.
+// when returning a reference from a method that requires a lifetime e.g
+// pub fn name(&self) -> &'src str {
+//     self.name.lexeme
+// } else it is fine to just use an anonymous lifetime <'_>
+// when methods don't take an argument/return reference related to src
+impl Local<'_> {
+    pub fn is_initialized(&self) -> bool {
+        self.depth != -1
+    }
+
+    pub fn is_immutable(&self) -> bool {
+        self.is_const
+    }
 }
 
 // the source string should not be 'static because you don't want to require that
@@ -29,6 +49,7 @@ pub struct Compiler<'a, 'src> {
     parser: Parser<'src>,
     chunk: &'a mut Chunk,
     locals: Vec<Local<'src>>,
+    const_globals: Vec<SymbolU32>,
     scope_depth: i32, // the number of blocks surrouding the current bit of code being compiled.
                       // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
 }
@@ -41,6 +62,7 @@ impl<'src> Compiler<'_, 'src> {
             chunk: chunk,
             scope_depth: 0,
             locals: Vec::new(),
+            const_globals: Vec::new(),
         };
 
         compiler.parser.advance();
@@ -163,7 +185,7 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn variable_declaration(&mut self, is_const: bool) {
-        let global: usize = self.parse_variable("Expect variable name.");
+        let global: usize = self.parse_variable("Expect variable name.", is_const);
 
         // usecase: this branch decides what the Value in Variable declaration is.
         // case: var a = foo();  == the rhs expression  is evaluated.
@@ -193,6 +215,17 @@ impl<'src> Compiler<'_, 'src> {
         };
 
         if can_assign && self.match_token(Kind::Equal) {
+            // compile time check that this variable is i mutable
+            let check = match interner::get_symbol(name.lexeme) {
+                Some(symbol) => {
+                    self.const_globals.contains(&symbol)
+                }
+                None => false,
+            };
+            if check {
+                self.parser.error("Const variable cannot be assigned to.");
+                return;
+            }
             self.expression();
             self.emit_opcode_operand(set_op, arg);
         } else {
@@ -220,8 +253,9 @@ impl<'src> Compiler<'_, 'src> {
         }
         if is_const {
             self.emit_opcode_operand(OpCode::ConstGlobal, global);
+        } else {
+            self.emit_opcode_operand(OpCode::DefineGlobal, global);
         }
-        self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
 
     // marks a variable as initialized once it has been defined.
@@ -558,9 +592,9 @@ impl<'src> Compiler<'_, 'src> {
     /// consumes the identifier token for the variable name, adds its lexeme
     /// to the chunk’s constant table as a string, and then returns the
     /// constant table index where it was added
-    fn parse_variable(&mut self, err_msg: &'static str) -> usize {
+    fn parse_variable(&mut self, err_msg: &'static str, is_const: bool) -> usize {
         self.consume(Kind::Identifier, err_msg);
-        self.declare_variable();
+        self.declare_variable(is_const);
         if self.scope_depth > 0 {
             // exit the function if in a local scope.
             return 0;
@@ -568,7 +602,7 @@ impl<'src> Compiler<'_, 'src> {
         self.identifier_constant(self.parser.previous)
     }
 
-    fn declare_variable(&mut self) {
+    fn declare_variable(&mut self, is_const: bool) {
         if self.scope_depth == 0 {
             return;
         }
@@ -578,7 +612,7 @@ impl<'src> Compiler<'_, 'src> {
         // recent declarations.
         for local in self.locals.iter().rev() {
             // local.depth < scope depth means the current local is an outer variable
-            // stops search.
+            // search starts from most inward scope out. 
             if local.depth != -1 && local.depth < self.scope_depth {
                 break;
             }
@@ -588,13 +622,14 @@ impl<'src> Compiler<'_, 'src> {
                     .error("Variable with this name exists in this scope.");
             }
         }
-        self.add_local(name);
+        self.add_local(name, is_const);
     }
 
-    fn add_local(&mut self, token: Token<'src>) {
+    fn add_local(&mut self, token: Token<'src>, immutable: bool) {
         self.locals.push(Local {
             name: token,
             depth: self.scope_depth,
+            is_const: immutable
         });
     }
 

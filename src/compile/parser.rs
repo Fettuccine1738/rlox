@@ -44,7 +44,7 @@ impl<'src> Parser<'src> {
         if self.current.kind == kind {
             if kind == Kind::EOF {
                 return;
-            } else {
+            } else { // prepare to work on next token
                 self.advance();
                 return;
             }
