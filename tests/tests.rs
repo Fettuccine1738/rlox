@@ -118,6 +118,16 @@ pub mod test {
     }
 
     #[test]
+    fn test_local_scopes_ok() {
+        let mut chunk: Chunk = Chunk::new();
+        let _src = "{ var breakfast = \"beignets\"; \n\
+                         var beverage = \"capuccino\"; \n\
+                         breakfast = \"beignets with \"+ beverage; \n\
+                         print breakfast; }";
+        assert!(Compiler::compile(_src, &mut chunk));
+    }
+
+    #[test]
     fn test_chunk_orders_byte_ok() {
         // let virtual_machine = VM::init();
         let mut ch: Chunk = Chunk::new();

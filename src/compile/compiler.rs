@@ -203,17 +203,17 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn named_variable(&mut self, name: Token, can_assign: bool) {
-        let (get_op, set_op, arg) = match self.resolve_local(&name) {
-            Some(index) => (OpCode::GetLocal, OpCode::SetLocal, index),
+        let (get_op, set_op, arg, is_const) = match self.resolve_local(&name) {
+            Some(index) => (OpCode::GetLocal, OpCode::SetLocal, index, self.locals[index].is_const),
             None => {
                 let idx: usize = self.identifier_constant(name);
-                (OpCode::GetGlobal, OpCode::SetGlobal, idx)
+                (OpCode::GetGlobal, OpCode::SetGlobal, idx, self.const_globals.contains(&idx))
             }
         };
 
         if can_assign && self.match_token(Kind::Equal) {
             // compile time check that this slots in the constants pool is immutable
-            if self.const_globals.contains(&arg) {
+            if is_const {
                 let msg = format!("Const variable `{}` cannot be assigned to.", name.lexeme);
                 self.parser.error(&msg);
                 return;
@@ -239,8 +239,8 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn define_variable(&mut self, global: usize, is_const: bool) {
-        if self.scope_depth > 0 {
-            self.mark_initialized();
+        if self.scope_depth > 0 { // local scope.
+            self.mark_initialized(is_const);
             return;
         }
         if is_const {
@@ -254,9 +254,11 @@ impl<'src> Compiler<'_, 'src> {
     // marks a variable as initialized once it has been defined.
     // Declared = variable is in an uninitialized state.
     // Defined = variable is initialized and availble for use.
-    fn mark_initialized(&mut self) {
-        let index = self.locals.len() - 1;
-        self.locals[index].depth = self.scope_depth;
+    fn mark_initialized(&mut self, is_const: bool) {
+        if let Some(local) = self.locals.last_mut() {
+            local.depth = self.scope_depth;
+            local.is_const = is_const;
+        }
     }
 
     fn synchronize(&mut self) {
