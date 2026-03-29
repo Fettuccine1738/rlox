@@ -148,9 +148,11 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn declaration(&mut self) {
-        // if current token is Kind::Var consume the variable's name.
+        // if current token is Kind::Var consume the variable's (lexeme) name.
         if self.match_token(Kind::Var) {
-            self.variable_declaration();
+            self.variable_declaration(false);
+        } else if self.match_token(Kind::Const) {
+            self.variable_declaration(true);
         } else {
             self.statement();
         }
@@ -160,7 +162,7 @@ impl<'src> Compiler<'_, 'src> {
         }
     }
 
-    fn variable_declaration(&mut self) {
+    fn variable_declaration(&mut self, is_const: bool) {
         let global: usize = self.parse_variable("Expect variable name.");
 
         // usecase: this branch decides what the Value in Variable declaration is.
@@ -174,7 +176,7 @@ impl<'src> Compiler<'_, 'src> {
         }
 
         self.consume(Kind::SemiColon, "Expect ';' after expression.");
-        self.define_variable(global);
+        self.define_variable(global, is_const);
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -211,10 +213,13 @@ impl<'src> Compiler<'_, 'src> {
         None
     }
 
-    fn define_variable(&mut self, global: usize) {
+    fn define_variable(&mut self, global: usize, is_const: bool) {
         if self.scope_depth > 0 {
             self.mark_initialized();
             return;
+        }
+        if is_const {
+            self.emit_opcode_operand(OpCode::ConstGlobal, global);
         }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
@@ -272,7 +277,7 @@ impl<'src> Compiler<'_, 'src> {
         if self.match_token(Kind::SemiColon) {
             // no initializer.
         } else if self.match_token(Kind::Var) {
-            self.variable_declaration();
+            self.variable_declaration(false);
         } else {
             self.expr_statement();
         }

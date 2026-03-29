@@ -60,6 +60,7 @@ pub enum Kind {
     True,
     Var,
     While,
+    Const,
 
     Error,
     EOF,

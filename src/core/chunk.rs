@@ -112,6 +112,8 @@ impl Chunk {
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
+            OpCode::ConstGlobal => chunk.byte_instruction("OP_CONST_GLOBAL", offset),
+            OpCode::ConstLocal => chunk.byte_instruction("OP_CONST_LOCAL", offset),
         }
     }
 

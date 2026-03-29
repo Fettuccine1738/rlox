@@ -98,22 +98,6 @@ impl<'src> Scanner<'src> {
     }
 
     fn identifier_type(&mut self) -> Kind {
-        // let ch: char = self.source.as_bytes()[self.current] as char;
-        // match ch {
-        //     'src' => self.check_keyword(1, 2, "nd", Kind::And),
-        //     'c' => self.check_keyword(1, 4, "lass", Kind::Class),
-        //     'e' => self.check_keyword(1, 3, "lse", Kind::Else),
-        //     'i' => self.check_keyword(1, 1, "f", Kind::If),
-        //     'n' => self.check_keyword(1, 2, "il", Kind::Nil),
-        //     'o' => self.check_keyword(1, 1, "r", Kind::Or),
-        //     'p' => self.check_keyword(1, 4, "rint", Kind::Print),
-        //     'r' => self.check_keyword(1, 5, "eturn", Kind::Return),
-        //     's' => self.check_keyword(1, 4, "uper", Kind::Super),
-        //     'v' => self.check_keyword(1, 2, "ar", Kind::Var),
-        //     'w' => self.check_keyword(1, 4, "hile", Kind::While),
-        //     _ => todo!()
-        // }
-        // Kind::Identifier
         let text = &self.source[self.start..self.current];
         match text {
             "and" => Kind::And,
@@ -127,6 +111,7 @@ impl<'src> Scanner<'src> {
             "super" => Kind::Super,
             "var" => Kind::Var,
             "while" => Kind::While,
+            "const" => Kind::Const,
             _ => Kind::Identifier,
         }
     }
