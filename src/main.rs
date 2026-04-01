@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 
-use rlox::vm::InterpretResult;
+use rlox::runtime::vm::InterpretResult;
 
 pub fn repl() {
     // let stdin = std::io::stdin();

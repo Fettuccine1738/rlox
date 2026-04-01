@@ -5,7 +5,7 @@ pub mod test {
         compile::compiler::Compiler,
         core::opcode::OpCode,
         core::value::Value,
-        vm::{self, InterpretResult},
+        runtime::vm::{self, InterpretResult},
     };
 
     // Not a real test, just to walk through the implementation so far.

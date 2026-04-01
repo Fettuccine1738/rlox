@@ -1,4 +1,4 @@
 pub mod compile;
 pub mod data_structures;
-pub mod vm;
+pub mod runtime;
 pub mod core;
