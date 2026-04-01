@@ -2,7 +2,7 @@ use crate::compile::token::Kind;
 use crate::compile::token::Token;
 
 // a Scanner struct must not outlive the source string it points to.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Scanner<'src> {
     pub source: &'src str,
     start: usize,
@@ -112,6 +112,7 @@ impl<'src> Scanner<'src> {
             "var" => Kind::Var,
             "while" => Kind::While,
             "const" => Kind::Const,
+            "fun" => Kind::Fun,
             _ => Kind::Identifier,
         }
     }

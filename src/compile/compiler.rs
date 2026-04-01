@@ -1,15 +1,18 @@
-use ::string_interner::symbol::SymbolU32;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::{mem, usize};
 
 use super::parser::Parser;
-use super::scanner::Scanner;
 use super::token::Kind;
-use crate::core::chunk::Chunk;
 use crate::compile::token::Token;
-use crate::data_structures::interner::{self};
+use crate::core::chunk::Chunk;
 use crate::core::opcode::OpCode;
-use crate::core::value::Value;
+use crate::core::{lang::Function, lang::FunctionType, value::Value};
+use crate::data_structures::interner::{self};
 
-#[derive(Debug)]
+pub const FUNCTION_ARG_MAX: u8 = 255;
+
+#[derive(Debug, Default)]
 pub struct Local<'src> {
     name: Token<'src>,
     // record the scope depth of the where the local var was declared.
@@ -39,58 +42,90 @@ impl Local<'_> {
 // not strings read from files or stdin at runtime. Keeping it as a generic
 // 'src is the right call: it says "tokens borrow from whatever source string you give me,
 // and that source just needs to outlive the compiler".
-#[derive(Debug)]
-pub struct Compiler<'a, 'src> {
+#[derive(Debug, Default)]
+pub struct Compiler<'src> {
     // 'src annotation here tells Rust that the tokens current and previous
     // in the parser lives as long as the source string.
-    parser: Parser<'src>,
-    chunk: &'a mut Chunk,
+    parser: Rc<RefCell<Parser<'src>>>,
     locals: Vec<Local<'src>>,
     const_globals: Vec<usize>,
     scope_depth: i32, // the number of blocks surrouding the current bit of code being compiled.
-                      // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
+    // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
+    function: Function,
+    function_type: FunctionType,
+    enclosing: Option<Box<Compiler<'src>>>,
 }
 
-impl<'src> Compiler<'_, 'src> {
+impl<'src> Compiler<'src> {
     // associated function, like java static functions
-    pub fn compile(source: &str, chunk: &mut Chunk) -> bool {
+    /// The VM passes a Chunk to the compiler which it fills with code.
+    /// now the compiler will create and return a function that contains the
+    /// compiled top-level code.
+    pub fn compile(source: &str) -> Option<Rc<Function>> {
         let mut compiler: Compiler = Compiler {
-            parser: Parser::new(Scanner::new(source)),
-            chunk: chunk,
+            // NOTE: parser is enclosed here for interior mutability. when compiling functions,
+            // reference to the outer parser is needed to continue the single pass.
+            parser: Rc::new(RefCell::new(Parser::new(source))),
             scope_depth: 0,
             locals: Vec::new(),
             const_globals: Vec::new(),
+            // interior mutabliity, this is so we can return the function after compiling
+            // and don't have to worry about `dangling` ptr once compile is finished.
+            function: Function::new(),
+            function_type: FunctionType::default(),
+            enclosing: None,
         };
 
-        compiler.parser.advance();
+        // why do we need this??
+        compiler.locals.push(Local {
+            name: Token::default(),
+            depth: 0,
+            is_const: false,
+        });
+
+        compiler.parser.borrow_mut().advance();
 
         while !compiler.match_token(Kind::EOF) {
             compiler.declaration();
         }
 
-        compiler.end_compilation();
-        !compiler.parser.had_error
+        // Rc<RefCell<T> allows 'interior mutability' = Multiple owners who can all mutate
+        // RefCell alone — one owner, mutable. Fine, but...
+        // let a = RefCell::new(String::from("hello"));
+        // let b = a;  // ❌ moved — a is gone. Only one owner.
+
+        // Rc alone — multiple owners, but...
+        // let a = Rc::new(String::from("hello"));
+        // let b = Rc::clone(&a);
+        // a.push_str(" world");  // ❌ can't mutate through Rc
+        let function: Rc<Function> = compiler.end_compilation();
+        if compiler.parser.borrow().had_error {
+            None
+        } else {
+            Some(function)
+        }
     }
 
     fn consume(&mut self, kind: Kind, err_msg: &'static str) {
-        self.parser.consume(kind, err_msg);
+        self.parser.borrow_mut().consume(kind, err_msg);
     }
 
     fn match_token(&mut self, kind: Kind) -> bool {
         if !self.check(kind) {
             false
         } else {
-            self.parser.advance();
+            self.parser.borrow_mut().advance();
             true
         }
     }
 
     fn check(&mut self, kind: Kind) -> bool {
-        self.parser.current.kind == kind
+        self.parser.borrow().current.kind == kind
     }
 
     fn emit_return(&mut self) {
-        self.emit_byte(OpCode::Return as u8);
+        self.emit_opcode(OpCode::NIL);
+        self.emit_opcode(OpCode::Return);
     }
 
     fn emit_opcode(&mut self, op_code: OpCode) {
@@ -99,7 +134,8 @@ impl<'src> Compiler<'_, 'src> {
 
     // byte may be opcode or operand
     fn emit_byte(&mut self, byte: u8) {
-        self.chunk.write(byte, self.parser.previous.line);
+        let line = self.parser.borrow().previous.line;
+        self.current_chunk().write(byte, line);
     }
 
     fn emit_opcodes(&mut self, op_1: OpCode, op_2: OpCode) {
@@ -120,17 +156,18 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
-        self.chunk.write(byte_1, self.parser.previous.line);
-        self.chunk.write(byte_2, self.parser.previous.line);
+        let line = self.parser.borrow().previous.line;
+        self.current_chunk().write(byte_1, line);
+        self.current_chunk().write(byte_2, line);
     }
 
     fn emit_constant(&mut self, value: Value) {
         // emits the opcode and its byte operand (the index of the value in the constants array.)
-        let index: usize = self.chunk.add_if_absent(value);
+        let index: usize = self.current_chunk().add_if_absent(value);
         // this lets us record the index that triggers the use of OpCode::Constant24, where reading 3 bytes
         // must be read to get the index of a constant from the constant pool.
-        if self.chunk.index_const24 == std::usize::MAX && index > 255 {
-            self.chunk.save_index();
+        if self.current_chunk().index_const24 == std::usize::MAX && index > 255 {
+            self.current_chunk().save_index();
         }
 
         self.emit_opcode_operand(
@@ -147,38 +184,163 @@ impl<'src> Compiler<'_, 'src> {
         self.parse_precedence(Precedence::Assignment);
     }
 
-    fn end_compilation(&mut self) {
+    fn end_compilation(&mut self) -> Rc<Function> {
         self.emit_return();
         #[cfg(any(test, debug_assertions))] // analogous to a #ifdef block in C
         // custom features could be used too. #[cfg(feature="")]
-        println!("{:?}", self.chunk);
-        Chunk::disassemble(
-            self.current_chunk(),
-            if self.parser.had_error {
-                "Failed to Compile"
-            } else {
-                "Compile Successful"
-            },
-        );
+        // println!("{:?}", self.function);
+        let name = self
+            .function
+            .name
+            .as_deref()
+            .unwrap_or("Script")
+            .to_string();
+        let status = if self.parser.borrow().had_error {
+            "Failed to Compile"
+        } else {
+            "Compile successful"
+        };
+        let display_string = format!("{}  :  {}", name, status);
+
+        Chunk::disassemble(self.current_chunk(), &display_string);
+
+        let function = std::mem::take(&mut self.function);
+        Rc::new(function)
     }
 
-    fn current_chunk(&self) -> &Chunk {
-        self.chunk
+    /// the current chunk is always the chunk owned by the function currently
+    /// being compiled.
+    fn current_chunk(&mut self) -> &mut Chunk {
+        &mut self.function.chunk
     }
 
     fn declaration(&mut self) {
         // if current token is Kind::Var consume the variable's (lexeme) name.
-        if self.match_token(Kind::Var) {
+        if self.match_token(Kind::Fun) {
+            self.func_declaration();
+        } else if self.match_token(Kind::Var) {
             self.variable_declaration(false);
         } else if self.match_token(Kind::Const) {
             self.variable_declaration(true);
+        } else if self.match_token(Kind::Return) {
+            self.return_statement();
         } else {
             self.statement();
         }
 
-        if self.parser.panic_mode {
+        if self.parser.borrow().panic_mode {
             self.synchronize();
         }
+    }
+
+    fn return_statement(&mut self) {
+        if self.function_type == FunctionType::Script {
+            self.parser
+                .borrow_mut()
+                .error("Can't return from top-level code.");
+        }
+
+        if self.match_token(Kind::SemiColon) {
+            // if there is no return value, implictly return NIL
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(Kind::SemiColon, "Expect ';' after return value.");
+            self.emit_opcode(OpCode::Return);
+        }
+    }
+
+    fn func_declaration(&mut self) {
+        // top level function declaration at the top level binds to a global variable.
+        // NOTE: is_const = false here because functions are implicitly immutable.
+        let global: usize = self.parse_variable("Expect function name.", false);
+        // mark_initialized was used to prevent using a variable before it is fully defined.
+        // i.e var foo = foo; . However we don't want this restriction on function.
+        // e.g for recursion. so we immediately mark it as initialized before compiling the function body.
+        self.mark_initialized(false);
+        self.function(FunctionType::Function);
+        self.define_variable(global, false);
+    }
+
+    fn function(&mut self, func_type: FunctionType) {
+        // we take out self because of weird lifetime issues and replace with default
+        // enclosing is returned back into self.
+        let mut enclosing = std::mem::take(self);
+        let function_name = enclosing.parser.borrow().previous.lexeme;
+        enclosing.consume(Kind::LeftParen, "Expect '(' in function declaration.");
+
+        let mut inner: Compiler = Compiler {
+            parser: enclosing.parser.clone(),
+            locals: Vec::new(),
+            scope_depth: enclosing.scope_depth,
+            const_globals: Vec::new(),
+            function: Function::new(),
+            function_type: func_type,
+            enclosing: Some(Box::new(enclosing)),
+        };
+
+        inner.function.name = Some(function_name.to_owned());
+
+        if !inner.check(Kind::RightParen) {
+            loop {
+                inner.function.arity += 1;
+                if inner.function.arity > FUNCTION_ARG_MAX {
+                    inner
+                        .parser
+                        .borrow_mut()
+                        .error_at_current("Function cannot have more than 255 parameters.");
+                }
+                // we probably should also make is_const true at some point and force unique function names.
+                let constant = inner.parse_variable("Expect parameter name", false);
+                inner.define_variable(constant, false);
+                if !self.match_token(Kind::Comma) {
+                    break;
+                }
+            }
+        }
+
+        inner.consume(Kind::RightParen, "Expect ')' after parameters.");
+        inner.begin_scope();
+        inner.consume(Kind::LeftBrace, "Expect '{' before function body.");
+        inner.block();
+        let function: Rc<Function> = inner.end_compilation();
+        let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
+        let index: usize = self
+            .current_chunk()
+            .add_if_absent(Value::LoxFunction(function));
+        self.emit_opcode_operand(
+            if index > 255 {
+                OpCode::Constant24
+            } else {
+                OpCode::Constant
+            },
+            index,
+        );
+    }
+
+    fn call(&mut self) {
+        let arg_count = self.argument_list();
+        self.emit_opcode_operand(OpCode::Call, arg_count);
+    }
+
+    fn argument_list(&mut self) -> usize {
+        let mut arg_count: usize = 0;
+        if !self.check(Kind::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == FUNCTION_ARG_MAX as usize {
+                    self.parser
+                        .borrow_mut()
+                        .error("Can't have more than 255 arguments.");
+                }
+                arg_count += 1;
+                if !self.match_token(Kind::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(Kind::RightParen, "Expect ')' after arguments.");
+        arg_count
     }
 
     fn variable_declaration(&mut self, is_const: bool) {
@@ -199,15 +361,26 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn variable(&mut self, can_assign: bool) {
-        self.named_variable(self.parser.previous, can_assign)
+        let name_token = self.parser.borrow().previous;
+        self.named_variable(name_token, can_assign)
     }
 
     fn named_variable(&mut self, name: Token, can_assign: bool) {
         let (get_op, set_op, arg, is_const) = match self.resolve_local(&name) {
-            Some(index) => (OpCode::GetLocal, OpCode::SetLocal, index, self.locals[index].is_const),
+            Some(index) => (
+                OpCode::GetLocal,
+                OpCode::SetLocal,
+                index,
+                self.locals[index].is_const,
+            ),
             None => {
                 let idx: usize = self.identifier_constant(name);
-                (OpCode::GetGlobal, OpCode::SetGlobal, idx, self.const_globals.contains(&idx))
+                (
+                    OpCode::GetGlobal,
+                    OpCode::SetGlobal,
+                    idx,
+                    self.const_globals.contains(&idx),
+                )
             }
         };
 
@@ -215,7 +388,7 @@ impl<'src> Compiler<'_, 'src> {
             // compile time check that this slots in the constants pool is immutable
             if is_const {
                 let msg = format!("Const variable `{}` cannot be assigned to.", name.lexeme);
-                self.parser.error(&msg);
+                self.parser.borrow_mut().error(&msg);
                 return;
             }
             self.expression();
@@ -230,6 +403,7 @@ impl<'src> Compiler<'_, 'src> {
             if *name == local.name {
                 if local.depth == -1 {
                     self.parser
+                        .borrow_mut()
                         .error("Can't read local variable in its own initializer.");
                 }
                 return Some(idx);
@@ -239,7 +413,8 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn define_variable(&mut self, global: usize, is_const: bool) {
-        if self.scope_depth > 0 { // local scope.
+        if self.scope_depth > 0 {
+            // local scope.
             self.mark_initialized(is_const);
             return;
         }
@@ -255,6 +430,9 @@ impl<'src> Compiler<'_, 'src> {
     // Declared = variable is in an uninitialized state.
     // Defined = variable is initialized and availble for use.
     fn mark_initialized(&mut self, is_const: bool) {
+        if self.scope_depth == 0 {
+            return;
+        }
         if let Some(local) = self.locals.last_mut() {
             local.depth = self.scope_depth;
             local.is_const = is_const;
@@ -262,14 +440,14 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn synchronize(&mut self) {
-        self.parser.panic_mode = false;
+        self.parser.borrow_mut().panic_mode = false;
 
-        while self.parser.current.kind != Kind::EOF {
-            if self.parser.previous.kind == Kind::SemiColon {
+        while self.parser.borrow().current.kind != Kind::EOF {
+            if self.parser.borrow().previous.kind == Kind::SemiColon {
                 return;
             }
 
-            match self.parser.current.kind {
+            match self.parser.borrow().current.kind {
                 Kind::Class
                 | Kind::Fun
                 | Kind::Var
@@ -370,14 +548,14 @@ impl<'src> Compiler<'_, 'src> {
 
         let offset = self.count() - start + 2;
         if offset as u16 > std::u16::MAX {
-            self.parser.error("Loop body too large.");
+            self.parser.borrow_mut().error("Loop body too large.");
         }
         self.emit_byte((offset & 0xff) as u8);
         self.emit_byte(((offset >> 8) & 0xff) as u8);
     }
 
     fn count(&self) -> usize {
-        self.chunk.code.len()
+        self.function.chunk.code.len()
     }
 
     // NOTE: statments have zero stack effect i.e do not leave values on the stack.
@@ -442,13 +620,15 @@ impl<'src> Compiler<'_, 'src> {
         let jump = self.count() - 2 - offset;
 
         if jump as u16 > std::u16::MAX {
-            self.parser.error("Too much code to jump over.");
+            self.parser
+                .borrow_mut()
+                .error("Too much code to jump over.");
         }
 
         let jump = jump as u32;
         // little-endian
-        self.chunk.code[offset] = (jump & 0xFF) as u8;
-        self.chunk.code[offset + 1] = (jump >> 8) as u8;
+        self.current_chunk().code[offset] = (jump & 0xFF) as u8;
+        self.current_chunk().code[offset + 1] = (jump >> 8) as u8;
     }
 
     fn block(&mut self) {
@@ -485,7 +665,7 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn number(&mut self) {
-        let value: f64 = self.parser.previous.lexeme.parse::<f64>().unwrap();
+        let value: f64 = self.parser.borrow().previous.lexeme.parse::<f64>().unwrap();
         self.emit_constant(Value::Number(value));
     }
 
@@ -497,7 +677,7 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn unary(&mut self) {
-        let operator: Kind = self.parser.previous.kind;
+        let operator: Kind = self.parser.borrow().previous.kind;
         // compile the operand
         self.parse_precedence(Precedence::Unary);
 
@@ -516,7 +696,7 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn binary(&mut self) {
-        let operator: Kind = self.parser.previous.kind;
+        let operator: Kind = self.parser.borrow().previous.kind;
         let rule: &ParseRule = Self::get_parse_rule(operator);
         self.parse_precedence(Precedence::try_from(rule.precedence as u8 + 1).unwrap()); // tries to parse rhs with a higher precedence.
 
@@ -536,7 +716,8 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn literal(&mut self) {
-        match self.parser.previous.kind {
+        let token_kind = self.parser.borrow().previous.kind;
+        match token_kind {
             Kind::False => self.emit_byte(OpCode::False as u8),
             Kind::True => self.emit_byte(OpCode::True as u8),
             Kind::Nil => self.emit_byte(OpCode::NIL as u8),
@@ -545,7 +726,7 @@ impl<'src> Compiler<'_, 'src> {
     }
 
     fn string(&mut self) {
-        let lexeme = self.parser.previous.lexeme;
+        let lexeme = self.parser.borrow().previous.lexeme;
         // trim off "" from both ends
         let trimmed_lexeme = &lexeme[1..lexeme.len() - 1];
         self.emit_constant(Value::String(interner::intern(trimmed_lexeme)));
@@ -555,8 +736,9 @@ impl<'src> Compiler<'_, 'src> {
     /// e.g -a.b + c :: without precedence levels becomes -(a.b + c). Precedence correctly
     /// parses it as (-a.b) + c because Precedenc::Unary > Term.  
     fn parse_precedence(&mut self, precedence: Precedence) {
-        self.parser.advance();
-        if let Some(prefix) = Self::get_parse_rule(self.parser.previous.kind).prefix {
+        self.parser.borrow_mut().advance();
+        let previous_token = self.parser.borrow().previous;
+        if let Some(prefix) = Self::get_parse_rule(previous_token.kind).prefix {
             // Some infix operations destroy the precedence operation.
             // take a * b = c + d;
             // when parsing the right hand to the infix op(*), variable b
@@ -568,19 +750,27 @@ impl<'src> Compiler<'_, 'src> {
 
             let dbg_prec = precedence as u8;
 
-            while dbg_prec <= (Self::get_parse_rule(self.parser.current.kind).precedence as u8) {
-                self.parser.advance();
-                match Self::get_parse_rule(self.parser.previous.kind).infix {
+            while dbg_prec
+                <= (Self::get_parse_rule(self.parser.borrow().current.kind).precedence as u8)
+            {
+                self.parser.borrow_mut().advance();
+                let token_kind = self.parser.borrow().previous.kind;
+                match Self::get_parse_rule(token_kind).infix {
                     Some(infix) => infix(self, can_assign),
-                    None => self.parser.error("Unexpected infix expression."),
+                    None => self
+                        .parser
+                        .borrow_mut()
+                        .error("Unexpected infix expression."),
                 }
             }
 
             if can_assign && self.match_token(Kind::Equal) {
-                self.parser.error("Invalid assignment target.");
+                self.parser.borrow_mut().error("Invalid assignment target.");
             }
         } else {
-            self.parser.error("expected an expression here.");
+            self.parser
+                .borrow_mut()
+                .error("expected an expression here.");
         }
     }
 
@@ -594,26 +784,29 @@ impl<'src> Compiler<'_, 'src> {
             // exit the function if in a local scope.
             return 0;
         }
-        self.identifier_constant(self.parser.previous)
+        let identifier = self.parser.borrow().previous;
+        self.identifier_constant(identifier)
     }
 
     fn declare_variable(&mut self, is_const: bool) {
+        let name = self.parser.borrow().previous;
         if self.scope_depth == 0 {
+            interner::intern(name.lexeme);
             return;
         }
-        let name = self.parser.previous;
 
         // NOTE: search direction here is required to search most
         // recent declarations.
         for local in self.locals.iter().rev() {
             // local.depth < scope depth means the current local is an outer variable
-            // search starts from most inward scope out. 
+            // search starts from most inward scope out.
             if local.depth != -1 && local.depth < self.scope_depth {
                 break;
             }
 
             if name.lexeme == local.name.lexeme {
                 self.parser
+                    .borrow_mut()
                     .error("Variable with this name exists in this scope.");
             }
         }
@@ -624,13 +817,26 @@ impl<'src> Compiler<'_, 'src> {
         self.locals.push(Local {
             name: token,
             depth: self.scope_depth,
-            is_const: immutable
+            is_const: immutable,
         });
     }
 
     fn identifier_constant(&mut self, token: Token) -> usize {
-        let symbol: SymbolU32 = interner::intern(token.lexeme);
-        self.chunk.add_if_absent(Value::String(symbol))
+        match interner::get_symbol(token.lexeme) {
+            Some(symbol) => self.current_chunk().add_if_absent(Value::String(symbol)),
+            None => {
+                self.parser.borrow_mut().had_error = true;
+                // NOTE: although we are reporting an error and halt compilation.
+                // we still add the constant to the pool. This is because this function still needs a valid
+                // value to return.
+                let sym = interner::intern(token.lexeme);
+                let index = self.current_chunk().add_if_absent(Value::String(sym));
+                self.parser
+                    .borrow_mut()
+                    .error_at_current("undeclared variable is being assinged to.");
+                index
+            }
+        }
     }
 
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
@@ -737,8 +943,6 @@ static RULES: [ParseRule; 40] = {
     let default = ParseRule::default();
     let mut rules = [default; 40];
 
-    rules[(Kind::LeftParen as u8) as usize] =
-        ParseRule::new_prefix(|compiler, _| compiler.grouping(), Precedence::None);
     rules[(Kind::Minus as u8) as usize] = ParseRule::new(
         |compiler, _| compiler.unary(),
         |compiler, _| compiler.binary(),
@@ -787,6 +991,11 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::Or as u8) as usize] = ParseRule::new_infix(
         |compiler, can_assign| compiler.and(can_assign),
         Precedence::Or,
+    );
+    rules[(Kind::LeftParen as u8) as usize] = ParseRule::new(
+        |compiler, _| compiler.grouping(),
+        |compiler, _| compiler.call(),
+        Precedence::Call,
     );
     rules
 };

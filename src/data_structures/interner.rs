@@ -11,7 +11,7 @@ pub fn intern(string: &str) -> SymbolU32 {
 
 pub fn get_symbol(string: &str) -> Option<SymbolU32> {
     STRING_INTERNER.lock().unwrap().get(string)
-} 
+}
 
 pub fn get_string(symbol: SymbolU32) -> Option<String> {
     STRING_INTERNER

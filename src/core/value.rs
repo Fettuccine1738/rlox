@@ -1,27 +1,49 @@
+#![allow(unreachable_patterns)]
 use std::{
     fmt::Display,
     ops::{Add, Div, Mul, Neg, Sub},
+    rc::Rc,
 };
 
 use string_interner::symbol::SymbolU32;
 
-use crate::data_structures::interner::{self};
+use crate::{
+    core::lang::Function,
+    data_structures::interner::{self},
+    std::VmResult,
+};
 
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Boolean(bool),
     Nil,
     Number(f64),
-    Object(Box<HeapAllocatedObj>), // remove for now, not needed.
-    // interned strings allow us to compare addreses which is more efficient
+    LoxFunction(Rc<crate::core::lang::Function>),
+    // interned strings allow us to compare addreses(symbols) which is more efficient
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
+    NativeFunction(NativeFn),
 }
 
 impl Value {
+    // we could do the same for strings, but we already have native functions for that.
+    pub fn less_than(lhs: &Value, rhs: &Value) -> Option<Value> {
+        match (lhs, rhs) {
+            (Value::Number(ln), Value::Number(rn)) => Some(Value::Boolean(ln < rn)),
+            _ => None
+        }
+    }
+
+    pub fn greater_than(lhs: &Value, rhs: &Value) -> Option<Value> {
+        match (lhs, rhs) {
+            (Value::Number(ln), Value::Number(rn)) => Some(Value::Boolean(ln > rn)),
+            _ => None
+        }
+    }
+
     pub fn is_bool(value: &Value) -> bool {
         matches!(value, Value::Boolean(_))
     }
@@ -34,13 +56,16 @@ impl Value {
         matches!(value, Value::Number(_))
     }
 
+    pub fn is_native(value: &Value) -> bool {
+        matches!(value, Value::NativeFunction(_))
+    }
+
     pub fn is_object(value: &Value) -> bool {
-        matches!(value, Value::Object(_))
+        matches!(value, Value::LoxFunction(_)) || matches!(value, Value::NativeFunction(_))
     }
 
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
-        // matches!(self, Value::Object(o) if o.is_string())
     }
 
     pub fn as_bool(value: &Value) -> bool {
@@ -48,6 +73,14 @@ impl Value {
             *b
         } else {
             panic!("Expected Variant boolean but got {:?}", value);
+        }
+    }
+
+    pub fn as_native(value: &Value) -> Option<NativeFn> {
+        if let Value::NativeFunction(f) = value {
+            Some(*f)
+        } else {
+            None
         }
     }
 
@@ -59,8 +92,12 @@ impl Value {
         }
     }
 
-    pub fn new_string_obj(s: String) -> Self {
-        Value::Object(Box::new(HeapAllocatedObj::String(s)))
+    pub fn as_function(value: &Value) -> Rc<Function> {
+        if let Value::LoxFunction(boxed_f) = value {
+            return boxed_f.clone();
+        } else {
+            panic!("Expected Variant boolean but got {:?}", value);
+        }
     }
 
     pub fn values_equal(a: Value, b: Value) -> bool {
@@ -68,11 +105,9 @@ impl Value {
             (Value::Boolean(av), Value::Boolean(bv)) => av == bv,
             (Value::Nil, Value::Nil) => true,
             (Value::Number(av), Value::Number(bv)) => av == bv,
-            (Value::Object(av), Value::Object(bv)) => match (av.as_ref(), bv.as_ref()) {
-                (HeapAllocatedObj::String(a), HeapAllocatedObj::String(b)) => a == b,
-                // _ => false
-            },
             (Value::String(lsz), Value::String(rsz)) => lsz == rsz,
+            (Value::Nil, _) => false, // allow java style value != null.
+            (_, Value::Nil) => false,
             _ => false,
         }
     }
@@ -90,11 +125,12 @@ impl Display for Value {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Nil => write!(f, "NIL"),
-            Value::Object(o) => write!(f, "{}", o),
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
                 write!(f, ":{}", s)
             }
+            Value::NativeFunction(n) => write!(f, "{}", n),
+            Value::LoxFunction(n) => write!(f, "{}", n),
             _ => todo!(),
         }
     }
@@ -120,11 +156,6 @@ impl Add for Value {
     fn add(self, other: Self) -> Self::Output {
         match (&self, &other) {
             (Value::Number(l), Value::Number(r)) => Some(Value::Number(l + r)),
-            (Value::Object(l), Value::Object(r)) if l.is_string() && r.is_string() => {
-                let mut concat = l.as_string().unwrap().to_owned();
-                concat.push_str(r.as_string().unwrap());
-                Some(Value::new_string_obj(concat))
-            }
             (Value::String(lhs), Value::String(rhs)) => {
                 let l_str = interner::get_string(*lhs);
                 let r_str = interner::get_string(*rhs);
@@ -175,36 +206,18 @@ impl Sub for Value {
     }
 }
 
-// -------------------------- Objects --------------
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum HeapAllocatedObj {
-    String(String),
-}
+#[derive(Debug, Clone, Copy, PartialOrd)]
+#[allow(unpredictable_function_pointer_comparisons)]
+pub struct NativeFn(pub for<'a> fn(usize, &'a [Value]) -> VmResult);
 
-impl HeapAllocatedObj {
-    pub fn is_string(&self) -> bool {
-        matches!(self, Self::String(_))
-    }
-
-    // pub fn is_obj_type(value: &Value, typ: HeapAllocatedObj) -> bool {
-    //     todo!()
-    // }
-
-    pub fn as_string(&self) -> Option<&str> {
-        todo!()
-        // let HeapAllocatedObj::String(s) = self {
-        //     Some(s)
-        // } else {
-        //     None
-        // }
-    }
-}
-
-impl Display for HeapAllocatedObj {
+impl Display for NativeFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::String(b) => write!(f, "{}", b),
-            // _ => todo!()
-        }
+        write!(f, "<native fn>")
+    }
+}
+
+impl PartialEq for NativeFn {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.0, other.0)
     }
 }

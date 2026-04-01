@@ -1,5 +1,5 @@
-use crate::{data_structures::interner, core::opcode::*, core::value::Value};
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::{core::opcode::*, core::value::Value, data_structures::interner};
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq)]
 pub struct Line(pub u32);
 
 // CHALLENGE: to generate a minimal instruction set eliminating
@@ -7,7 +7,7 @@ pub struct Line(pub u32);
 // constant -> op_sub -> constant -> op_mul -> constant 0 -> op_sub -> 2 (removing negation)
 // constant -> constant(-ve) -> op_mul -> constant(-2).
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
@@ -20,7 +20,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
@@ -114,6 +114,7 @@ impl Chunk {
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
             OpCode::ConstGlobal => chunk.byte_instruction("OP_CONST_GLOBAL", offset),
             OpCode::ConstLocal => chunk.byte_instruction("OP_CONST_LOCAL", offset),
+            OpCode::Call => chunk.byte_instruction("OP_CALL", offset),
         }
     }
 

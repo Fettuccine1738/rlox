@@ -1,48 +1,53 @@
 #[cfg(test)]
 pub mod test {
     use rlox::{
-        core::chunk::Chunk,
         compile::compiler::Compiler,
-        core::opcode::OpCode,
-        core::value::Value,
-        runtime::vm::{self, InterpretResult},
+        runtime::vm::{InterpretResult, VM},
     };
 
-    // Not a real test, just to walk through the implementation so far.
     #[test]
-    pub(super) fn tests_simple_arithmetic_op() {
-        // this also tests that a single '5' is stored in the constants pool.
+    pub(super) fn tests_arithmetic_expr() {
+        // TODO: this also tests that a single '5' is stored in the constants pool.
         // debug outputs should show 2 constants saved 5 and 4.
-        let source = "5 - 4 + 5;";
-        let mut ch: Chunk = Chunk::new();
-        let success: bool = Compiler::compile(source, &mut ch);
-        assert!(success);
+        let source = "print 5 - 4 + 5;";
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(source.to_string()), InterpretResult::Ok);
+    }
+
+    #[test]
+    pub(super) fn tests_assignment() {
+        // TODO: this also tests that a single '5' is stored in the constants pool.
+        // debug outputs should show 2 constants saved 5 and 4.
+        let source = "var simple = 5 - 4 + 5;";
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(source.to_string()), InterpretResult::Ok);
     }
 
     // tests end-end process from, scanning/parsing to
     // compiling and interpreting.
     #[test]
     pub(super) fn tests_compilation() {
-        let source = "!(5 - 4 > 3 * 2 == !nil);";
-        let mut vm = vm::VM::new();
-        let result = vm.compile(source.to_owned());
+        let source = "!(5 - 4 > 3 * 2 == !nil);"; // nil is falsy in lox. !nil = true.
+        let mut vm = VM::new();
+        let result = vm.interpret(source.to_owned());
         assert_eq!(result, InterpretResult::Ok);
     }
 
     #[test]
     fn tests_invalid_expr_is_compile_error() {
         let source = "1 +;";
-        let mut vm = vm::VM::new();
-        assert_eq!(vm.compile(source.to_owned()), InterpretResult::CompileError)
+        assert_eq!(
+            VM::new().interpret(source.to_owned()),
+            InterpretResult::CompileError
+        )
     }
 
     // Compilation should be successful.
     #[test]
     fn tests_runtime_error() {
         let source = "1 + nil;";
-        let mut vm = vm::VM::new();
         assert_eq!(
-            vm.interpret(source.to_owned()),
+            VM::new().interpret(source.to_owned()),
             InterpretResult::RuntimeError
         )
     }
@@ -50,8 +55,7 @@ pub mod test {
     // really annoying to append ';' to simple expressions.
     #[test]
     fn tests_string_concatenation() {
-        let mut ch: Chunk = Chunk::new();
-        assert!(Compiler::compile("\"st\" + \"ring\";", &mut ch));
+        assert!(Compiler::compile("\"st\" + \"ring\";").is_some());
     }
 
     #[test]
@@ -60,89 +64,73 @@ pub mod test {
                          var beverage = \"capuccino\"; \n\
                          var breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
-        assert_eq!(
-            vm::VM::new().interpret(_src.to_owned()),
-            InterpretResult::Ok
-        )
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok)
     }
 
     #[test]
     fn tests_valid_printstmt_successful() {
-        let mut chunk: Chunk = Chunk::new();
         let src = "print 1 + 2;";
-        assert!(Compiler::compile(src, &mut chunk));
+        assert!(Compiler::compile(src).is_some());
     }
 
-    // this should fail.
-    // TODO: force var or const keyword before variable declaration or
-    // keep as it is and implicit Var keyword.
     #[test]
     fn test_unnamed_variable_fails_compile() {
-        let mut chunk: Chunk = Chunk::new();
-        let src = "foo = \"bar\";";
-        assert!(Compiler::compile(src, &mut chunk));
+        let src = "foo = \"bar\";"; // variable foo is undeclared.
+        assert!(Compiler::compile(src).is_none());
     }
 
     #[test]
     fn tests_global_declaration() {
-        let mut chunk: Chunk = Chunk::new();
         let _src = "var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast;";
-        //  var boole = !true; \n\
-        assert!(Compiler::compile(_src, &mut chunk));
+        assert!(Compiler::compile(_src).is_some());
     }
 
-    /// tests that a const declared variable should fail 
-    /// at compile time when reassigned to. 
-    /// TODO: possibly allow this but ignore modification.
+    /// tests that a const declared variable should fail
+    /// at compile time when reassigned to.
     #[test]
     fn test_constglobal_declaration_notok() {
         let _src2 = "const b = \"cow\"; \n\
                                b = \"co\";";
-        assert!(!Compiler::compile(_src2, &mut Chunk::new()))
+        assert_eq!(
+            VM::new().interpret(_src2.to_owned()),
+            InterpretResult::CompileError
+        );
     }
-
 
     /// tests access const global variable compiles successfully.
     #[test]
     fn test_constglobal_access_ok() {
-        let mut vm = vm::VM::new();
         let _src2 = "const foo = \"hello\"; \n\
                            var bar = \"\"; \n\
                            bar = foo + \" world.\n\"; \n\
                            print bar; \n\
                            print foo;";
-        assert_eq!(vm.interpret(_src2.to_owned()), InterpretResult::Ok);
+        assert_eq!(VM::new().interpret(_src2.to_owned()), InterpretResult::Ok);
     }
 
     #[test]
     fn test_local_scopes_ok() {
-        let mut chunk: Chunk = Chunk::new();
         let _src = "{ var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
                          print breakfast; }";
-        assert!(Compiler::compile(_src, &mut chunk));
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
     }
 
     #[test]
     fn test_chunk_orders_byte_ok() {
-        // let virtual_machine = VM::init();
-        let mut ch: Chunk = Chunk::new();
-        // let idx = ch.add_constant(1.2);
-        // ch.write_chunk(OpCode::Return, 1);
-        ch.write_constant(Value::Number(42.01), 2);
-        ch.write_constant(Value::Number(2.0), 2);
-        ch.write_chunk(OpCode::Add, 2);
-        ch.write_constant(Value::Number(1.0), 2);
-        ch.write_chunk(OpCode::Divide, 2);
-        ch.write_chunk(OpCode::Negate, 2);
-        ch.write_chunk(OpCode::Return, 2);
-
-        // dbg!(&ch);
-        Chunk::disassemble(&ch, "test bytes");
-        // virtual_machine.
+        let source = "\n\
+                    fun areWeHavingItYet() { \n\
+                    print \"Yes we are!\";  \n\
+                } \n\
+                var start = time::clock();
+                areWeHavingItYet();
+                var end = time::clock();
+                print end - start;
+                ";
+        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
 }

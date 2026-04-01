@@ -1,4 +1,4 @@
-pub mod lox_errors;
+pub mod chunk;
+pub mod lang;
 pub mod opcode;
 pub mod value;
-pub mod chunk;

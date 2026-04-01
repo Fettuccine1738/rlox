@@ -1,7 +1,7 @@
 use string_interner::{Symbol, symbol::SymbolU32};
 
 use crate::core::value::Value;
-use std::{fmt::Debug};
+use std::fmt::Debug;
 
 // #[derive(Debug)]
 // pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
@@ -35,8 +35,8 @@ pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
 #[derive(Debug)]
 enum ProbeResult {
     Found(usize), // key exists at this index
-    Empty(usize), // key is absent, but we can insert here. Likely that original slot was taken 
-    Full, // table is full, need to grow
+    Empty(usize), // key is absent, but we can insert here. Likely that original slot was taken
+    Full,         // table is full, need to grow
 }
 
 //--------------utils---------------------------
@@ -121,7 +121,7 @@ impl HashTable {
         loop {
             match &self.entries[index] {
                 Some(entry) if entry.key == key => return ProbeResult::Found(index), //return &mut self.entries[index],
-                None => return ProbeResult::Empty(index), 
+                None => return ProbeResult::Empty(index),
                 _ => index = (index + 1) % len,
             }
 
@@ -174,8 +174,8 @@ impl HashTable {
 
         match self.get_key_index(key) {
             ProbeResult::Found(index) => {
-                let entry =  self.entries[index].as_ref();
-                return Some(entry.unwrap().value.clone())
+                let entry = self.entries[index].as_ref();
+                return Some(entry.unwrap().value.clone());
             }
             _ => return None,
         }
@@ -189,7 +189,7 @@ impl HashTable {
         }
         let len = self.entries.len();
         match self.get_key_index(key) {
-            ProbeResult::Empty(_) | ProbeResult::Full => None, // there is nothing to remove 
+            ProbeResult::Empty(_) | ProbeResult::Full => None, // there is nothing to remove
             ProbeResult::Found(index) => {
                 // std::mem::replace(&mut self.entries[index], None)
                 let removed: Option<Entry<SymbolU32, Value>> = self.entries[index].take();
@@ -211,7 +211,7 @@ impl HashTable {
     pub fn contains_key(&self, key: SymbolU32) -> bool {
         match self.get_key_index(key) {
             ProbeResult::Found(_) => true,
-            _ => false
+            _ => false,
         }
     }
 }

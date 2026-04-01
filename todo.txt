@@ -13,16 +13,7 @@ Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 
 - resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 
 
-- add final / const key word to prevent modification.
-* use new bytecode ConstGlobal and ConstLocal to represent immutable Local and Global 
-* create Const'Variant' of everything, this way we know not to update a value if it is of this type.
-but it should be preferably be a compile time error to assign to a const variable. How do we catch this
-error.? 
+- add final / const key word to support immutability. [done]
 
-PROS and cons of const'Variant' of every Value variant
-code size >> 
-
-** idea no 2. force const variables to have CAPITALIZED lexemes, by looking at a variable name, we know whether
-to allow modification.
-
-Decision 
+- add support for `continue`
+- add support for `switch` statements.

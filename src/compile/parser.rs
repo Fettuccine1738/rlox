@@ -2,7 +2,8 @@ use crate::compile::scanner::Scanner;
 use crate::compile::token::Kind;
 use crate::compile::token::Token;
 
-#[derive(Debug)]
+// derive Default because Compiler needs to use mem::replace / mem::take
+#[derive(Debug, Default)]
 pub struct Parser<'src> {
     /// 'src is the lifetime of the source string slices stored in tokens and
     /// 'scn is the shorter lifetime of the mutable borrow of the scanner itself.
@@ -17,9 +18,9 @@ pub struct Parser<'src> {
 }
 
 impl<'src> Parser<'src> {
-    pub fn new(scanner_: Scanner<'src>) -> Self {
+    pub fn new(source: &'src str) -> Self {
         Self {
-            scanner: scanner_,
+            scanner: Scanner::new(source),
             current: Token::default(),
             previous: Token::default(),
             had_error: false,
@@ -44,7 +45,8 @@ impl<'src> Parser<'src> {
         if self.current.kind == kind {
             if kind == Kind::EOF {
                 return;
-            } else { // prepare to work on next token
+            } else {
+                // prepare to work on next token
                 self.advance();
                 return;
             }

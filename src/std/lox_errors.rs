@@ -5,6 +5,7 @@ pub enum VmError {
     StackOverflow,
     InvalidOpcode(u8),
     Runtime(String),
+    Native(String),
 }
 
 impl fmt::Display for VmError {
@@ -13,6 +14,7 @@ impl fmt::Display for VmError {
             VmError::StackOverflow => write!(f, "Stackunderflow"),
             VmError::InvalidOpcode(op) => write!(f, "Invalid opcode: {}", op),
             VmError::Runtime(msg) => write!(f, "Runtime error: {}", msg),
+            VmError::Native(msg) => write!(f, "Runtime error: {}", msg),
         }
     }
 }
