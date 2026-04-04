@@ -5,6 +5,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type VmResult = Result<Value, VmError>;
 
+// the compiler uses this at comptime to know if a named variable is
+// a call to a native function
+pub fn is_native_call(func_name: &str) -> bool {
+    [
+        "time::clock",
+        "math::max",
+        "math::sqrt",
+        "math::pow",
+        "io::readLine",
+        "io::readNumber",
+        "strings::str_cmp",
+    ]
+    .contains(&func_name)
+}
+
 pub mod time {
     use super::*;
     pub fn clock(_arg_count: usize, _args: &[Value]) -> VmResult {

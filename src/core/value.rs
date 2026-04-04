@@ -33,14 +33,14 @@ impl Value {
     pub fn less_than(lhs: &Value, rhs: &Value) -> Option<Value> {
         match (lhs, rhs) {
             (Value::Number(ln), Value::Number(rn)) => Some(Value::Boolean(ln < rn)),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn greater_than(lhs: &Value, rhs: &Value) -> Option<Value> {
         match (lhs, rhs) {
             (Value::Number(ln), Value::Number(rn)) => Some(Value::Boolean(ln > rn)),
-            _ => None
+            _ => None,
         }
     }
 

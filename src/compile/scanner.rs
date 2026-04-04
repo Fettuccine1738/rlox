@@ -85,7 +85,11 @@ impl<'src> Scanner<'src> {
     }
 
     fn identifier(&mut self) -> Token<'src> {
-        while Self::is_alpha(self.peek().unwrap()) || self.peek().unwrap().is_digit(10) {
+        while Self::is_alpha(self.peek().unwrap())
+            || self.peek().unwrap().is_digit(10)
+            || self.peek().unwrap() == ':'
+        {
+            // allow ::qualifier for native functions.
             self.advance();
         }
         let kind = self.identifier_type();

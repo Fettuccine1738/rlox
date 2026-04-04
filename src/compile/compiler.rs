@@ -8,7 +8,7 @@ use crate::compile::token::Token;
 use crate::core::chunk::Chunk;
 use crate::core::opcode::OpCode;
 use crate::core::{lang::Function, lang::FunctionType, value::Value};
-use crate::data_structures::interner::{self};
+use crate::data_structures::interner::{self, intern};
 
 pub const FUNCTION_ARG_MAX: u8 = 255;
 
@@ -822,15 +822,19 @@ impl<'src> Compiler<'src> {
     }
 
     fn identifier_constant(&mut self, token: Token) -> usize {
-        match interner::get_symbol(token.lexeme) {
+        let name = token.lexeme;
+        match interner::get_symbol(name) {
             Some(symbol) => self.current_chunk().add_if_absent(Value::String(symbol)),
             None => {
-                self.parser.borrow_mut().had_error = true;
                 // NOTE: although we are reporting an error and halt compilation.
                 // we still add the constant to the pool. This is because this function still needs a valid
                 // value to return.
-                let sym = interner::intern(token.lexeme);
+                let sym = interner::intern(name);
                 let index = self.current_chunk().add_if_absent(Value::String(sym));
+                // NOTE: do not report error if it is a native function.
+                if crate::std::is_native_call(name) {
+                    return index;
+                }
                 self.parser
                     .borrow_mut()
                     .error_at_current("undeclared variable is being assinged to.");

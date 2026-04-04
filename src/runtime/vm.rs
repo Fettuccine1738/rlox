@@ -12,7 +12,7 @@ use crate::core::opcode::OpCode;
 use crate::core::value::{NativeFn, Value};
 use crate::data_structures::interner::{self};
 use crate::data_structures::map::HashTable;
-use crate::std::io;
+use crate::std::{io, strings};
 use crate::std::math;
 use crate::std::time;
 
@@ -68,6 +68,7 @@ impl VM {
                 self.define_native("math::sqrt".to_owned(), NativeFn(math::sqrt));
                 self.define_native("math::max".to_owned(), NativeFn(math::max));
                 self.define_native("math::pow".to_owned(), NativeFn(math::pow));
+                self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
 
                 self.stack.push(Value::LoxFunction(rc.clone()));
                 self.call(rc, 0);
@@ -321,10 +322,8 @@ impl VM {
 
     fn call(&mut self, function: Rc<Function>, arity: u8) -> bool {
         if arity != function.arity {
-            let err_msg: String = format!(
-                "Expected {} arguments but got {}",
-                function.arity, arity
-            );
+            let err_msg: String =
+                format!("Expected {} arguments but got {}", function.arity, arity);
             Self::runtime_error(self, &err_msg);
             return false;
         }
