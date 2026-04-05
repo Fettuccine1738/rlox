@@ -291,10 +291,10 @@ impl VM {
                 }
                 Value::NativeFunction(func) => {
                     let arg_start = self.stack.len() - arity as usize;
-                    let args = &self.stack[arg_start..];
+                    let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
                     match (func.0)(arity as usize, args) {
                         Ok(result) => {
-                            self.stack.truncate(arg_start + 1);
+                            self.stack.truncate(arg_start); // remove arguments to function.
                             self.push_value(result);
                             return true;
                         }
