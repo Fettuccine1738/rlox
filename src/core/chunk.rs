@@ -107,7 +107,13 @@ impl Chunk {
             OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
             OpCode::PopN => chunk.constant_instruction("OP_SET_GLOBAL", offset),
-            OpCode::GetLocal => chunk.byte_instruction("OP_GET_LOCAL", offset),
+            OpCode::GetLocal => {
+                let slot = chunk.code[offset + 1];
+                // -1 because operand to this opcode is the index in its local stack
+                // which is offset by 1 because there is always a dummy local.
+                println!("OP_GET_LOCAL {:04}", chunk.constants[(slot - 1) as usize]);
+                offset + 2
+            }
             OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
@@ -125,7 +131,7 @@ impl Chunk {
 
     fn byte_instruction(&self, name: &str, offset: usize) -> usize {
         let slot = self.code[offset + 1];
-        println!("{}s {:04}", name, slot);
+        println!("{}s {:04}", name, self.constants[slot as usize]);
         offset + 2
     }
 

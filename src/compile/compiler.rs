@@ -276,7 +276,7 @@ impl<'src> Compiler<'src> {
         let mut inner: Compiler = Compiler {
             parser: enclosing.parser.clone(),
             locals: Vec::new(),
-            scope_depth: enclosing.scope_depth,
+            scope_depth: 0,
             const_globals: Vec::new(),
             function: Function::new(),
             function_type: func_type,
@@ -284,6 +284,11 @@ impl<'src> Compiler<'src> {
         };
 
         inner.function.name = Some(function_name.to_owned());
+        inner.locals.push(Local {
+            name: Token::default(),
+            depth: 0,
+            is_const: false,
+        });
 
         if !inner.check(Kind::RightParen) {
             loop {
@@ -309,6 +314,7 @@ impl<'src> Compiler<'src> {
         inner.block();
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
+
         let index: usize = self
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
@@ -404,7 +410,7 @@ impl<'src> Compiler<'src> {
 
     fn resolve_local(&mut self, name: &Token) -> Option<usize> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
-            if *name == local.name {
+            if name.lexeme == local.name.lexeme {
                 if local.depth == -1 {
                     self.parser
                         .borrow_mut()
