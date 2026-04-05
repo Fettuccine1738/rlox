@@ -8,9 +8,13 @@ use crate::compile::token::Token;
 use crate::core::chunk::Chunk;
 use crate::core::opcode::OpCode;
 use crate::core::{lang::Function, lang::FunctionType, value::Value};
-use crate::data_structures::interner::{self, intern};
+use crate::data_structures::interner::{self};
 
 pub const FUNCTION_ARG_MAX: u8 = 255;
+// dummy Parse Rule, required in cases where an error occured, 
+// causing an unexpected TokenKind to be used to indexe the ParseRule table. 
+// Compiler in some cases doesn't stop.
+pub static DEFAULT_PARSE_RULE: ParseRule = ParseRule::default();
 
 #[derive(Debug, Default)]
 pub struct Local<'src> {
@@ -418,12 +422,12 @@ impl<'src> Compiler<'src> {
             self.mark_initialized(is_const);
             return;
         }
+
         if is_const {
-            self.emit_opcode_operand(OpCode::ConstGlobal, global);
+            // self.emit_opcode_operand(OpCode::ConstGlobal, global);
             self.const_globals.push(global); // compiler knows index at this slot is immutable
-        } else {
-            self.emit_opcode_operand(OpCode::DefineGlobal, global);
         }
+        self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
 
     // marks a variable as initialized once it has been defined.
@@ -529,7 +533,7 @@ impl<'src> Compiler<'src> {
         let loop_start = self.count(); // jump all the way back to here if condition is true
         self.consume(Kind::LeftParen, "Expect '(' after 'while'.");
         self.expression();
-        self.consume(Kind::LeftParen, "Expect ')' after condition.");
+        self.consume(Kind::RightParen, "Expect ')' after condition.");
 
         // exit_jump is dummy location to jump to outside the while loop
         // while true { block } (jump here.)
@@ -790,8 +794,8 @@ impl<'src> Compiler<'src> {
 
     fn declare_variable(&mut self, is_const: bool) {
         let name = self.parser.borrow().previous;
+        interner::intern(name.lexeme);
         if self.scope_depth == 0 {
-            interner::intern(name.lexeme);
             return;
         }
 
@@ -844,7 +848,10 @@ impl<'src> Compiler<'src> {
     }
 
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
-        &RULES[(kind as u8) as usize]
+        match RULES.get(kind as usize) {
+            Some(rule) => rule,
+            None => &DEFAULT_PARSE_RULE,
+        }
     }
 }
 

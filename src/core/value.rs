@@ -168,6 +168,28 @@ impl Add for Value {
                     _ => None,
                 }
             }
+            // String concatenation: This needed for print statments.
+            (Value::String(lhs), Value::Number(n)) => {
+                match interner::get_string(*lhs) {
+                    Some(mut string) => {
+                        string.push_str(&n.to_string());
+                        let symbol= interner::intern(&string); 
+                        return Some(Value::String(symbol));
+                    }
+                    None => None,
+                }
+            }
+            (Value::Number(n), Value::String(lhs)) => {
+                match interner::get_string(*lhs) {
+                    Some(string) => {
+                        let mut new_string = n.to_string(); // order matters here.
+                        new_string.push_str(&string);
+                        let symbol= interner::intern(&new_string); 
+                        return Some(Value::String(symbol));
+                    }
+                    None => None,
+                }
+            }
             _ => None,
         }
     }

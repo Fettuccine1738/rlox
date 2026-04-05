@@ -42,7 +42,6 @@ pub mod test {
         )
     }
 
-    // Compilation should be successful.
     #[test]
     fn tests_runtime_error() {
         let source = "1 + nil;";
@@ -139,8 +138,8 @@ pub mod test {
     #[test]
     fn test_args_function_call_ok() {
         let source = "
-                var s1 = \"Foo\";
-                var s2 = \"Har\";
+                var s1 = \"aoo\";
+                var s2 = \"aoo\";
                 var comp = strings::str_cmp(s1, s2);
                 if (comp == -1.0) {
                     print s1 + \" less \" + s2;
@@ -148,6 +147,20 @@ pub mod test {
                     print s1 + \" equals \" + s2;
                 } else {
                     print s1 + \" greater \" + s2;
+                }
+                ";
+        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
+    }
+
+    // TODO: allow string and number concatenation print foo + \" squared = \" + math::pow(foo, 2);
+    #[test]
+    fn test_while_loop_ok() {
+        let source = "
+                var foo = 0;
+                const bar = 5;
+                while (foo < bar) {
+                    print foo + \" squared = \" + math::pow(foo, 2);
+                    foo = foo + 1;
                 }
                 ";
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);

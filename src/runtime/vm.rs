@@ -294,7 +294,8 @@ impl VM {
                     let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
                     match (func.0)(arity as usize, args) {
                         Ok(result) => {
-                            self.stack.truncate(arg_start); // remove arguments to function.
+                            // let trunc = self.stack.len() - (arg_start + 1);
+                            self.stack.truncate(arg_start - 1); // remove function and its arguments.
                             self.push_value(result);
                             return true;
                         }
