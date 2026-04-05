@@ -142,16 +142,7 @@ pub mod strings {
             (Value::String(s_1), Value::String(s_2)) => {
                 match (interner::get_string(*s_1), interner::get_string(*s_2)) {
                     (Some(sl), Some(sr)) => {
-                        return Ok({
-                            Value::Number((sl.cmp(&sr) as i8) as f64)
-                            // if sl < sr {
-                            //     Value::Number(-1.0)
-                            // } else if sl > sr {
-                            //     Value::Number(1.0)
-                            // } else {
-                            //     Value::Number(0.0)
-                            // }
-                        });
+                        return Ok(Value::Number((sl.cmp(&sr) as i8) as f64));
                     }
                     _ => {
                         return Err(VmError::Native(

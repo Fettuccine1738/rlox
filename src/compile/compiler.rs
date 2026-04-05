@@ -889,7 +889,6 @@ impl TryFrom<u8> for Precedence {
 
 // -----------------ParseRule ---------------
 type ParseFn = fn(&mut Compiler, bool) -> ();
-// type ParseFn = fn(&mut Compiler, bool) -> ();
 #[derive(Debug, Clone, Copy)]
 pub struct ParseRule {
     prefix: Option<ParseFn>, // Option<Box<dyn FnMut(&mut Compiler, bool)>>,

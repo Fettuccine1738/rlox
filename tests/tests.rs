@@ -120,8 +120,9 @@ pub mod test {
         assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
     }
 
+    /// tests functions (both Lox and Native) that do not take in any argument.
     #[test]
-    fn test_chunk_orders_byte_ok() {
+    fn test_noarg_function_call_ok() {
         let source = "\n\
                     fun areWeHavingItYet() { \n\
                     print \"Yes we are!\";  \n\
@@ -130,6 +131,24 @@ pub mod test {
                 areWeHavingItYet();
                 var end = time::clock();
                 print end - start;
+                ";
+        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
+    }
+
+    /// native functions that take arguments.
+    #[test]
+    fn test_args_function_call_ok() {
+        let source = "
+                var s1 = \"Foo\";
+                var s2 = \"bar\";
+                var comp = strings::str_cmp(s1, s2);
+                if (comp == -1.0) {
+                    print s1 + \"less \" + s2;
+                } else if (comp == 0.0) {
+                    print s1 + \"equals \" + s2;
+                } else {
+                    print s1 + \"greater \" + s2;
+                }
                 ";
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }

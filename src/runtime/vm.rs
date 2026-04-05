@@ -12,9 +12,9 @@ use crate::core::opcode::OpCode;
 use crate::core::value::{NativeFn, Value};
 use crate::data_structures::interner::{self};
 use crate::data_structures::map::HashTable;
-use crate::std::{io, strings};
 use crate::std::math;
 use crate::std::time;
+use crate::std::{io, strings};
 
 // use crate::lox_errors::VmError;
 // use crate::value::HeapAllocatedObj;

@@ -149,9 +149,12 @@ impl<'src> Scanner<'src> {
             let nxt = self.source.as_bytes()[self.current + 1] as char;
             if nxt.is_digit(10) {
                 self.advance(); // consume '.'
+                self.advance(); // consume 'nxt'
                 while let Some(ch) = self.peek() {
                     if ch.is_digit(10) {
                         self.advance();
+                    } else {
+                        break;
                     }
                 }
             }
