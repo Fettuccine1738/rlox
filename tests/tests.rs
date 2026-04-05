@@ -165,4 +165,19 @@ pub mod test {
                 ";
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
+
+    #[test]
+    fn tests_nested_functions() {
+        let src = "var x = \"sglobal\";
+                        fun outer() {
+                        var x = \"souter\";
+                        fun inner() {
+                            print x;
+                        }
+                        inner();
+                    }
+                outer();";
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    }
 }

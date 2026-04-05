@@ -11,8 +11,8 @@ use crate::core::{lang::Function, lang::FunctionType, value::Value};
 use crate::data_structures::interner::{self};
 
 pub const FUNCTION_ARG_MAX: u8 = 255;
-// dummy Parse Rule, required in cases where an error occured, 
-// causing an unexpected TokenKind to be used to indexe the ParseRule table. 
+// dummy Parse Rule, required in cases where an error occured,
+// causing an unexpected TokenKind to be used to indexe the ParseRule table.
 // Compiler in some cases doesn't stop.
 pub static DEFAULT_PARSE_RULE: ParseRule = ParseRule::default();
 
