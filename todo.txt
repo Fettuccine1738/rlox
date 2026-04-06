@@ -11,7 +11,7 @@ Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 
 - todo rename ambigous match_char in scanner to next_match_char
 
-- resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 
+- TODO:: resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 
 
 - add final / const key word to support immutability. [done]
 

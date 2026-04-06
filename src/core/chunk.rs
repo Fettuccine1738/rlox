@@ -134,6 +134,8 @@ impl Chunk {
                 println!("{:?}", chunk.constants[constant as usize]);
                 off_t
             }
+            OpCode::GetUpValue => todo!(),
+            OpCode::SetUpValue => todo!(),
         }
     }
 
