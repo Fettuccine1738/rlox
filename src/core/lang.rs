@@ -39,9 +39,17 @@ impl PartialOrd for Function {
 /// points into the VM's value stack at the first slot that this function
 /// can use.
 pub struct CallFrame {
-    pub function: Rc<Function>,
+    pub closure: Rc<Closure>,
     pub ip: usize,
     pub slots: usize, // offset
+}
+
+impl CallFrame {
+    /// this is required to know if the operand to an opcode is the 
+    /// next byte or the next three bytes (lots of constants in chunks.)
+    pub fn read_long(&self) -> bool {
+        self.ip >= self.closure.function.chunk.index_const24
+    }
 }
 
 impl Display for Function {
@@ -79,4 +87,20 @@ pub enum FunctionType {
     Function,
     #[default]
     Script,
+}
+
+
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Closure {
+    pub function: Rc<Function>
+}
+
+impl Closure {
+    pub fn new(func: Rc<Function>) -> Self {
+        Self { function: func }
+    }
+
+    pub fn clone(func: &Rc<Function>) -> Self {
+        Self { function: func.clone() }
+    }
 }

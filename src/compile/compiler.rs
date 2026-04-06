@@ -6,6 +6,7 @@ use super::parser::Parser;
 use super::token::Kind;
 use crate::compile::token::Token;
 use crate::core::chunk::Chunk;
+use crate::core::lang::Closure;
 use crate::core::opcode::OpCode;
 use crate::core::{lang::Function, lang::FunctionType, value::Value};
 use crate::data_structures::interner::{self};
@@ -315,17 +316,11 @@ impl<'src> Compiler<'src> {
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
 
+        // value is stored as function but used a closure.
         let index: usize = self
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
-        self.emit_opcode_operand(
-            if index > 255 {
-                OpCode::Constant24
-            } else {
-                OpCode::Constant
-            },
-            index,
-        );
+        self.emit_opcode_operand(OpCode::Closure, index);
     }
 
     fn call(&mut self) {

@@ -7,7 +7,7 @@ use string_interner::symbol::SymbolU32;
 //------------Virtual-machine
 use crate::compile::compiler::Compiler;
 use crate::core::chunk::Chunk;
-use crate::core::lang::{CallFrame, Function};
+use crate::core::lang::{CallFrame, Closure};
 use crate::core::opcode::OpCode;
 use crate::core::value::{NativeFn, Value};
 use crate::data_structures::interner::{self};
@@ -70,8 +70,13 @@ impl VM {
                 self.define_native("math::pow".to_owned(), NativeFn(math::pow));
                 self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
 
+                // guard against garbage collection.
                 self.stack.push(Value::LoxFunction(rc.clone()));
-                self.call(rc, 0);
+                self.stack.pop();
+                //---
+                let closure = Rc::new(Closure::new(rc));
+                self.stack.push(Value::LoxClosure(closure.clone()));
+                self.call(closure, 0);
                 self.run()
             }
         }
@@ -103,7 +108,7 @@ impl VM {
             #[cfg(debug_assertions)]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
-                Chunk::disassemble_instruction(&self.get_current_frame().function.chunk, start);
+                Chunk::disassemble_instruction(&self.get_current_frame().closure.function.chunk, start);
             }
 
             // short lived borrows because borrow checker complains about
@@ -132,12 +137,12 @@ impl VM {
                     }
                 }
                 OpCode::Constant => {
-                    let constant: Value = self.read_constant(false);
+                    let constant: Value = self.read_constant();
                     println!("{}", constant);
                     self.stack.push(constant); // self.push_value(constant)
                 }
                 OpCode::Constant24 => {
-                    let constant: Value = self.read_constant(true);
+                    let constant: Value = self.read_constant();
                     println!("{}", constant);
                     self.stack.push(constant);
                 }
@@ -278,6 +283,12 @@ impl VM {
                     // we are supposed to  update the old frame
                     // frame = &vm.frames[vm.frame_count - 1];
                 }
+                OpCode::Closure => {
+                    let value = self.read_constant();
+                    let function = Value::as_function(&value);
+                    let closure = Closure::clone(&function);
+                    self.stack.push(Value::LoxClosure(Rc::new(closure)));
+                }
                 _ => todo!(),
             }
         }
@@ -285,10 +296,10 @@ impl VM {
 
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
-            match &callee {
-                Value::LoxFunction(_) => {
-                    return self.call(Value::as_function(&callee), arity);
-                }
+            return match &callee {
+                // Value::LoxFunction(_) => { represented now as closure.
+                //     self.call(Value::as_function(&callee), arity)
+                // }
                 Value::NativeFunction(func) => {
                     let arg_start = self.stack.len() - arity as usize;
                     let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
@@ -297,13 +308,15 @@ impl VM {
                             // let trunc = self.stack.len() - (arg_start + 1);
                             self.stack.truncate(arg_start - 1); // remove function and its arguments.
                             self.push_value(result);
-                            return true;
+                            true;
                         }
                         Err(e) => self.runtime_error(&e.to_string()),
                     }
+                   false
                 }
-                _ => return false,
-            }
+                Value::LoxClosure(_) =>   self.call(Value::as_closure(&callee), arity),
+                _ => false,
+            };
         }
         self.runtime_error("Can only call functions and classes.");
         false
@@ -321,10 +334,10 @@ impl VM {
         self.pop();
     }
 
-    fn call(&mut self, function: Rc<Function>, arity: u8) -> bool {
-        if arity != function.arity {
+    fn call(&mut self, clojure: Rc<Closure>, arity: u8) -> bool {
+        if arity != clojure.function.arity {
             let err_msg: String =
-                format!("Expected {} arguments but got {}", function.arity, arity);
+                format!("Expected {} arguments but got {}", clojure.function.arity, arity);
             Self::runtime_error(self, &err_msg);
             return false;
         }
@@ -337,7 +350,7 @@ impl VM {
         // ^      | -------args to fn ------
         // slots points here (slot 0 = the function being called)
         self.call_frames.push(CallFrame {
-            function: function.clone(),
+            closure: clojure.clone(),
             ip: 0,
             slots: self.stack.len() - arity as usize - 1,
         });
@@ -351,9 +364,9 @@ impl VM {
             // - 1 because ip points to the next instruction to be executed
             // but the failed instruction was the previous one.
             let instruction: usize = frame.ip - 1;
-            let line = frame.function.chunk.lines[instruction];
+            let line = frame.closure.function.chunk.lines[instruction];
             eprint!("[line {}] in ", line.0);
-            match &frame.function.name {
+            match &frame.closure.function.name {
                 Some(name) => eprintln!("{}", name),
                 None => eprintln!("Script"),
             }
@@ -363,7 +376,8 @@ impl VM {
     }
 
     // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
-    fn read_constant(&mut self, is_long: bool) -> Value {
+    fn read_constant(&mut self) -> Value {
+        let is_long = self.call_frames.last().unwrap().read_long();
         let index = if is_long {
             let b1 = self.read_byte() as u32;
             let b2 = self.read_byte() as u32;
@@ -377,6 +391,7 @@ impl VM {
         self.call_frames
             .last()
             .unwrap()
+            .closure
             .function
             .chunk
             .constants
@@ -396,7 +411,7 @@ impl VM {
 
     fn read_byte(&mut self) -> u8 {
         let call_frame = self.call_frames.last_mut().unwrap();
-        let byte_code: &u8 = call_frame.function.chunk.code.get(call_frame.ip).unwrap();
+        let byte_code: &u8 = call_frame.closure.function.chunk.code.get(call_frame.ip).unwrap();
         call_frame.ip += 1; // point to next byte_code.
         *byte_code
     }
@@ -417,9 +432,7 @@ impl VM {
         // Because we have 2 constant-indexing Operands OpConstant and OpConstant24
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
-        let call_frame = self.call_frames.last().unwrap();
-        let is_long = call_frame.ip >= call_frame.function.chunk.index_const24;
-        match self.read_constant(is_long) {
+        match self.read_constant() {
             Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
         }

@@ -8,7 +8,7 @@ use std::{
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    core::lang::Function,
+    core::lang::{Closure, Function},
     data_structures::interner::{self},
     std::VmResult,
 };
@@ -26,6 +26,7 @@ pub enum Value {
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
     NativeFunction(NativeFn),
+    LoxClosure(Rc<Closure>)
 }
 
 impl Value {
@@ -52,6 +53,10 @@ impl Value {
         matches!(value, Value::Nil)
     }
 
+    pub fn is_closure(value: &Value) -> bool {
+        matches!(value, Value::LoxClosure(_))
+    }
+
     pub fn is_number(value: &Value) -> bool {
         matches!(value, Value::Number(_))
     }
@@ -61,7 +66,7 @@ impl Value {
     }
 
     pub fn is_object(value: &Value) -> bool {
-        matches!(value, Value::LoxFunction(_)) || matches!(value, Value::NativeFunction(_))
+        matches!(value, Value::LoxClosure(_)) || matches!(value, Value::LoxFunction(_)) || matches!(value, Value::NativeFunction(_))
     }
 
     pub fn is_string(&self) -> bool {
@@ -87,6 +92,15 @@ impl Value {
     pub fn as_number(value: &Value) -> f64 {
         if let Value::Number(n) = value {
             *n
+        } else {
+            panic!("Expected Variant boolean but got {:?}", value);
+        }
+    }
+
+    // TODO: deduplicate and merge with as_function()
+    pub fn as_closure(value: &Value) -> Rc<Closure> {
+        if let Value::LoxClosure(clj) = value {
+            return clj.clone();
         } else {
             panic!("Expected Variant boolean but got {:?}", value);
         }
@@ -131,6 +145,7 @@ impl Display for Value {
             }
             Value::NativeFunction(n) => write!(f, "{}", n),
             Value::LoxFunction(n) => write!(f, "{}", n),
+            Value::LoxClosure(c) => write!(f, "{}", c.function),
             _ => todo!(),
         }
     }

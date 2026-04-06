@@ -12,7 +12,7 @@ pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
     pub lines: Vec<Line>,
-    // index_const24 records the size of the bytecode array when the constants pool
+    // HACK: index_const24 records the size of the bytecode array when the constants pool
     // exceeds 255 (the value at which Constant24 must be used as the operand to store and read constants.)
     // this allows the compiler & vm to compare the instruction ptr with this size
     // if the ip is >= index_const24 we have to read the next 3 bytes to get the correct index.
@@ -121,6 +121,19 @@ impl Chunk {
             OpCode::ConstGlobal => chunk.byte_instruction("OP_CONST_GLOBAL", offset),
             OpCode::ConstLocal => chunk.byte_instruction("OP_CONST_LOCAL", offset),
             OpCode::Call => chunk.byte_instruction("OP_CALL", offset),
+            OpCode::Closure => {
+                let (off_t, constant) = if offset < chunk.index_const24 {
+                    (offset + 2, chunk.code[offset + 1] as usize)
+                } else {
+                    let bytes = &chunk.code[offset + 1..offset + 4];
+                    let index = Self::inverse_resolve(bytes[0], bytes[1], bytes[2]);
+                    (offset + 4, index)
+                };
+
+                print!("OP_CLOSURE {:04}", constant);
+                println!("{:?}", chunk.constants[constant as usize]);
+                off_t
+            }
         }
     }
 
@@ -222,5 +235,10 @@ impl Chunk {
         let bits16 = ((bits >> 16) & 0xFF) as u8;
 
         (bits0_7, bits8_15, bits16)
+    }
+
+    pub fn inverse_resolve(bits0_7: u8, bits8_15: u8, bits16: u8) -> usize {
+        ((bits16 as usize) << 16) | ((bits8_15 as usize) << 8)
+                        | (bits0_7 as usize)
     }
 }
