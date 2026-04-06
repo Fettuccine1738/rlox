@@ -42,9 +42,12 @@ impl Local<'_> {
     }
 }
 
+/// index stores which local slot the upvalue is capturing.
+/// HACK: this should be an index since we already allow > 255 constants
+/// is_local: is true if it captures a local in its immediate scope.
+/// false if capturing an UpValue from the outer scope.
 #[derive(Debug)]
 pub struct UpValue {
-    /// index stores which local slot the upvalue is capturing.
     index: u8,
     is_local: bool,
 }

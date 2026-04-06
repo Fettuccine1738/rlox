@@ -122,7 +122,7 @@ impl Chunk {
             OpCode::ConstLocal => chunk.byte_instruction("OP_CONST_LOCAL", offset),
             OpCode::Call => chunk.byte_instruction("OP_CALL", offset),
             OpCode::Closure => {
-                let (off_t, constant) = if offset < chunk.index_const24 {
+                let (mut off_t, constant) = if offset < chunk.index_const24 {
                     (offset + 2, chunk.code[offset + 1] as usize)
                 } else {
                     let bytes = &chunk.code[offset + 1..offset + 4];
@@ -131,11 +131,23 @@ impl Chunk {
                 };
 
                 print!("OP_CLOSURE {:04}", constant);
-                println!("{:?}", chunk.constants[constant as usize]);
+                let function = Value::as_function(&chunk.constants[constant as usize]);
+                for _ in 0..function.upvalue_count {
+                    let is_local = chunk.code[off_t];
+                    off_t += 1;
+                    let index = chunk.code[off_t];
+                    off_t += 1;
+                    println!(
+                        "{:04}    |              {} {}",
+                        off_t - 2,
+                        if is_local == 1 { " local" } else { "upvalue" },
+                        index
+                    );
+                }
                 off_t
             }
-            OpCode::GetUpValue => todo!(),
-            OpCode::SetUpValue => todo!(),
+            OpCode::GetUpValue => chunk.byte_instruction("OP_GET_VALUE", offset),
+            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset)
         }
     }
 
