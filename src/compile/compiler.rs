@@ -48,7 +48,7 @@ impl Local<'_> {
 /// false if capturing an UpValue from the outer scope.
 #[derive(Debug)]
 pub struct UpValue {
-    index: u8,
+    index: u32,
     is_local: bool,
 }
 
@@ -333,16 +333,33 @@ impl<'src> Compiler<'src> {
         let index: usize = self
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
+        // operand to this opcode, is the constant functions index in the constants table.
         self.emit_opcode_operand(OpCode::Closure, index);
 
-        let bytes_to_emit: Vec<(u8, u8)> = self
+        // emit upvalues info stored.
+        let bytes_to_emit: Vec<(u8, u32)> = self
             .upvalues
             .iter()
             .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
             .collect();
-        for (flag, index) in bytes_to_emit {
-            self.emit_byte(flag);
-            self.emit_byte(index);
+
+        // variable encoding of the byte is now
+        // [0 | 1 (is this index > 255)][idx_1b | idx_3b][is_local]
+        for (is_local, index) in bytes_to_emit {
+            if index > 255 {
+                // is_long flag (used in cases where the captured variable) means
+                // is the (255+th) variable in the captured local or upvalue.
+                self.emit_byte(1);
+                // emit 3 bytes
+                let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(index as usize);
+                self.emit_byte(bits0_7);
+                self.emit_byte(bits8_15);
+                self.emit_byte(bits16);
+            } else {
+                self.emit_byte(0); // !is_long index into upvalues or locals.
+                self.emit_byte(index as u8);
+            }
+            self.emit_byte(is_local);
         }
     }
 
@@ -448,19 +465,20 @@ impl<'src> Compiler<'src> {
     /// every variable reference has been resolved as either a local, an upvalue, or a global
     fn resolve_upvalue(&mut self, name: &Token) -> Option<(usize, bool)> {
         // we are currently in the outer most compiler
-        if self.enclosing.is_none() {
+        let Some(enclosing) = self.enclosing.as_mut() else {
             return None;
-        }
+        };
+
         // reucursive call to search all the way back to the outermost compiler.
-        let local: Option<(usize, bool)> = self.enclosing.as_mut().unwrap().resolve_local(name);
+        let local: Option<(usize, bool)> = enclosing.resolve_local(name);
         // index refers to the index of the slot in its the enclosing locals
         if let Some((index, is_const)) = local {
             // value_index is the index of the captured up value in its own upvalues array.
             let value_index = self.add_upvalue(index, true);
             return Some((value_index, is_const));
-        } else if let Some((index, is_const)) =
-            self.enclosing.as_mut().unwrap().resolve_upvalue(name)
-        {
+        }
+
+        if let Some((index, is_const)) = enclosing.resolve_upvalue(name) {
             // we know its not local because the enclosing couldn't find in its locals.
             let value_index = self.add_upvalue(index, false);
             return Some((value_index, is_const));
@@ -473,7 +491,7 @@ impl<'src> Compiler<'src> {
     /// false means it captures the UpValue of some captured variable.
     fn add_upvalue(&mut self, index: usize, local: bool) -> usize {
         for (idx, upvalue) in self.upvalues.iter().enumerate() {
-            if upvalue.index == index as u8 && upvalue.is_local == local {
+            if upvalue.index == index as u32 && upvalue.is_local == local {
                 return idx;
             }
         }
@@ -485,7 +503,7 @@ impl<'src> Compiler<'src> {
         }
 
         self.upvalues.push(UpValue {
-            index: index as u8,
+            index: index as u32,
             is_local: local,
         });
         self.function.upvalue_count += 1;

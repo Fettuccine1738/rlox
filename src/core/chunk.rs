@@ -129,14 +129,31 @@ impl Chunk {
                     let index = Self::inverse_resolve(bytes[0], bytes[1], bytes[2]);
                     (offset + 4, index)
                 };
-
                 print!("OP_CLOSURE {:04}", constant);
                 let function = Value::as_function(&chunk.constants[constant as usize]);
                 for _ in 0..function.upvalue_count {
+                    // encoding [is_long][idx_1b or idx_3b][is_local]
+                    // is_long ? idx_3b : idx_1b (3b = 3bytes. upvalue may point to slot > 255.)
+                    let is_long = chunk.code[off_t];
+                    off_t += 1;
+
+                    let index: usize = if is_long == 1 {
+                        let index = Self::inverse_resolve(
+                            chunk.code[off_t],
+                            chunk.code[off_t + 1],
+                            chunk.code[off_t + 2],
+                        );
+                        off_t += 3;
+                        index
+                    } else {
+                        let index = chunk.code[off_t] as usize;
+                        off_t += 1;
+                        index
+                    };
+
                     let is_local = chunk.code[off_t];
                     off_t += 1;
-                    let index = chunk.code[off_t];
-                    off_t += 1;
+
                     println!(
                         "{:04}    |              {} {}",
                         off_t - 2,
@@ -147,7 +164,7 @@ impl Chunk {
                 off_t
             }
             OpCode::GetUpValue => chunk.byte_instruction("OP_GET_VALUE", offset),
-            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset)
+            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset),
         }
     }
 

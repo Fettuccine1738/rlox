@@ -17,3 +17,4 @@ Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 
 - add support for `continue`
 - add support for `switch` statements.
+- TODO(High): Fix emit bytes for captured upvalues (sitting in slots > 255)
