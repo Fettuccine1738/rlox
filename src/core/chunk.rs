@@ -238,7 +238,6 @@ impl Chunk {
     }
 
     pub fn inverse_resolve(bits0_7: u8, bits8_15: u8, bits16: u8) -> usize {
-        ((bits16 as usize) << 16) | ((bits8_15 as usize) << 8)
-                        | (bits0_7 as usize)
+        ((bits16 as usize) << 16) | ((bits8_15 as usize) << 8) | (bits0_7 as usize)
     }
 }

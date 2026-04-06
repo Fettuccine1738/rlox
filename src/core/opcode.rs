@@ -36,6 +36,8 @@ pub enum OpCode {
     ConstLocal = 27,
     Call = 28,
     Closure = 29,
+    GetUpValue = 30,
+    SetUpValue = 31,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -88,6 +90,8 @@ impl TryFrom<u8> for OpCode {
             27 => Ok(Self::ConstLocal),
             28 => Ok(Self::Call),
             29 => Ok(Self::Closure),
+            30 => Ok(Self::GetUpValue),
+            31 => Ok(Self::SetUpValue),
             _ => Err(()),
         }
     }

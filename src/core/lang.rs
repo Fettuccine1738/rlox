@@ -10,6 +10,7 @@ pub struct Function {
     pub arity: u8,
     pub chunk: Chunk,
     pub name: Option<String>,
+    pub upvalue_count: usize,
 }
 
 impl PartialEq for Function {
@@ -45,7 +46,7 @@ pub struct CallFrame {
 }
 
 impl CallFrame {
-    /// this is required to know if the operand to an opcode is the 
+    /// this is required to know if the operand to an opcode is the
     /// next byte or the next three bytes (lots of constants in chunks.)
     pub fn read_long(&self) -> bool {
         self.ip >= self.closure.function.chunk.index_const24
@@ -77,6 +78,7 @@ impl Function {
             arity: 0,
             name: None,
             chunk: Chunk::new(),
+            upvalue_count: 0,
         }
     }
 }
@@ -89,10 +91,9 @@ pub enum FunctionType {
     Script,
 }
 
-
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Closure {
-    pub function: Rc<Function>
+    pub function: Rc<Function>,
 }
 
 impl Closure {
@@ -101,6 +102,8 @@ impl Closure {
     }
 
     pub fn clone(func: &Rc<Function>) -> Self {
-        Self { function: func.clone() }
+        Self {
+            function: func.clone(),
+        }
     }
 }

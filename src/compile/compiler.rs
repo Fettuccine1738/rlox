@@ -42,6 +42,13 @@ impl Local<'_> {
     }
 }
 
+#[derive(Debug)]
+pub struct UpValue {
+    /// index stores which local slot the upvalue is capturing.
+    index: u8,
+    is_local: bool,
+}
+
 // the source string should not be 'static because you don't want to require that
 // it would mean only compiling string literals baked into the binary,
 // not strings read from files or stdin at runtime. Keeping it as a generic
@@ -59,6 +66,7 @@ pub struct Compiler<'src> {
     function: Function,
     function_type: FunctionType,
     enclosing: Option<Box<Compiler<'src>>>,
+    upvalues: Vec<UpValue>,
 }
 
 impl<'src> Compiler<'src> {
@@ -72,13 +80,14 @@ impl<'src> Compiler<'src> {
             // reference to the outer parser is needed to continue the single pass.
             parser: Rc::new(RefCell::new(Parser::new(source))),
             scope_depth: 0,
-            locals: Vec::new(),
-            const_globals: Vec::new(),
+            locals: vec![],
+            const_globals: vec![],
             // interior mutabliity, this is so we can return the function after compiling
             // and don't have to worry about `dangling` ptr once compile is finished.
             function: Function::new(),
             function_type: FunctionType::default(),
             enclosing: None,
+            upvalues: vec![],
         };
 
         // why do we need this??
@@ -282,6 +291,7 @@ impl<'src> Compiler<'src> {
             function: Function::new(),
             function_type: func_type,
             enclosing: Some(Box::new(enclosing)),
+            upvalues: vec![],
         };
 
         inner.function.name = Some(function_name.to_owned());
@@ -321,6 +331,16 @@ impl<'src> Compiler<'src> {
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
         self.emit_opcode_operand(OpCode::Closure, index);
+
+        let bytes_to_emit: Vec<(u8, u8)> = self
+            .upvalues
+            .iter()
+            .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
+            .collect();
+        for (flag, index) in bytes_to_emit {
+            self.emit_byte(flag);
+            self.emit_byte(index);
+        }
     }
 
     fn call(&mut self) {
@@ -372,21 +392,22 @@ impl<'src> Compiler<'src> {
 
     fn named_variable(&mut self, name: Token, can_assign: bool) {
         let (get_op, set_op, arg, is_const) = match self.resolve_local(&name) {
-            Some(index) => (
-                OpCode::GetLocal,
-                OpCode::SetLocal,
-                index,
-                self.locals[index].is_const,
-            ),
-            None => {
-                let idx: usize = self.identifier_constant(name);
-                (
-                    OpCode::GetGlobal,
-                    OpCode::SetGlobal,
-                    idx,
-                    self.const_globals.contains(&idx),
-                )
-            }
+            Some((index, is_const)) => (OpCode::GetLocal, OpCode::SetLocal, index, is_const),
+            None => match self.resolve_upvalue(&name) {
+                // NOTE: index refers to index in different tables.
+                // for UpValue, it is the index in the upvalues array.
+                Some((idx, is_const)) => (OpCode::GetUpValue, OpCode::SetUpValue, idx, is_const),
+                _ => {
+                    // here it is the index in its chunk constants pool.
+                    let idx: usize = self.identifier_constant(name);
+                    (
+                        OpCode::GetGlobal,
+                        OpCode::SetGlobal,
+                        idx,
+                        self.const_globals.contains(&idx),
+                    )
+                }
+            },
         };
 
         if can_assign && self.match_token(Kind::Equal) {
@@ -403,7 +424,7 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    fn resolve_local(&mut self, name: &Token) -> Option<usize> {
+    fn resolve_local(&mut self, name: &Token) -> Option<(usize, bool)> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
                 if local.depth == -1 {
@@ -411,10 +432,61 @@ impl<'src> Compiler<'src> {
                         .borrow_mut()
                         .error("Can't read local variable in its own initializer.");
                 }
-                return Some(idx);
+                return Some((idx, local.is_const));
             }
         }
         None
+    }
+
+    /// searches for a variable possibly declared in a surrounding function.
+    /// if `name.lexeme` is not found amongst its local variables.
+    /// returns the index where the variable was found and a bool if its immutable.
+    /// By the time the compiler reaches the end of a function declaration,
+    /// every variable reference has been resolved as either a local, an upvalue, or a global
+    fn resolve_upvalue(&mut self, name: &Token) -> Option<(usize, bool)> {
+        // we are currently in the outer most compiler
+        if self.enclosing.is_none() {
+            return None;
+        }
+        // reucursive call to search all the way back to the outermost compiler.
+        let local: Option<(usize, bool)> = self.enclosing.as_mut().unwrap().resolve_local(name);
+        // index refers to the index of the slot in its the enclosing locals
+        if let Some((index, is_const)) = local {
+            // value_index is the index of the captured up value in its own upvalues array.
+            let value_index = self.add_upvalue(index, true);
+            return Some((value_index, is_const));
+        } else if let Some((index, is_const)) =
+            self.enclosing.as_mut().unwrap().resolve_upvalue(name)
+        {
+            // we know its not local because the enclosing couldn't find in its locals.
+            let value_index = self.add_upvalue(index, false);
+            return Some((value_index, is_const));
+        } else {
+            return None;
+        }
+    }
+
+    /// local = true means a value decalred in an immediate outerscope is captured.
+    /// false means it captures the UpValue of some captured variable.
+    fn add_upvalue(&mut self, index: usize, local: bool) -> usize {
+        for (idx, upvalue) in self.upvalues.iter().enumerate() {
+            if upvalue.index == index as u8 && upvalue.is_local == local {
+                return idx;
+            }
+        }
+
+        if self.upvalues.len() == FUNCTION_ARG_MAX as usize {
+            self.parser
+                .borrow_mut()
+                .error("Too many closure variables in function.");
+        }
+
+        self.upvalues.push(UpValue {
+            index: index as u8,
+            is_local: local,
+        });
+        self.function.upvalue_count += 1;
+        self.upvalues.len() - 1
     }
 
     fn define_variable(&mut self, global: usize, is_const: bool) {

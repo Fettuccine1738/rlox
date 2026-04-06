@@ -75,7 +75,7 @@ impl VM {
                 self.stack.pop();
                 //---
                 let closure = Rc::new(Closure::new(rc));
-                self.stack.push(Value::LoxClosure(closure.clone()));
+                self.stack.push(Value::LoxClosure(Rc::clone(&closure)));
                 self.call(closure, 0);
                 self.run()
             }
@@ -108,7 +108,10 @@ impl VM {
             #[cfg(debug_assertions)]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
-                Chunk::disassemble_instruction(&self.get_current_frame().closure.function.chunk, start);
+                Chunk::disassemble_instruction(
+                    &self.get_current_frame().closure.function.chunk,
+                    start,
+                );
             }
 
             // short lived borrows because borrow checker complains about
@@ -312,9 +315,9 @@ impl VM {
                         }
                         Err(e) => self.runtime_error(&e.to_string()),
                     }
-                   false
+                    false
                 }
-                Value::LoxClosure(_) =>   self.call(Value::as_closure(&callee), arity),
+                Value::LoxClosure(_) => self.call(Value::as_closure(&callee), arity),
                 _ => false,
             };
         }
@@ -336,8 +339,10 @@ impl VM {
 
     fn call(&mut self, clojure: Rc<Closure>, arity: u8) -> bool {
         if arity != clojure.function.arity {
-            let err_msg: String =
-                format!("Expected {} arguments but got {}", clojure.function.arity, arity);
+            let err_msg: String = format!(
+                "Expected {} arguments but got {}",
+                clojure.function.arity, arity
+            );
             Self::runtime_error(self, &err_msg);
             return false;
         }
@@ -411,7 +416,13 @@ impl VM {
 
     fn read_byte(&mut self) -> u8 {
         let call_frame = self.call_frames.last_mut().unwrap();
-        let byte_code: &u8 = call_frame.closure.function.chunk.code.get(call_frame.ip).unwrap();
+        let byte_code: &u8 = call_frame
+            .closure
+            .function
+            .chunk
+            .code
+            .get(call_frame.ip)
+            .unwrap();
         call_frame.ip += 1; // point to next byte_code.
         *byte_code
     }

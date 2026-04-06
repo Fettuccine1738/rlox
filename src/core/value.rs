@@ -26,7 +26,7 @@ pub enum Value {
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
     NativeFunction(NativeFn),
-    LoxClosure(Rc<Closure>)
+    LoxClosure(Rc<Closure>),
 }
 
 impl Value {
@@ -66,7 +66,9 @@ impl Value {
     }
 
     pub fn is_object(value: &Value) -> bool {
-        matches!(value, Value::LoxClosure(_)) || matches!(value, Value::LoxFunction(_)) || matches!(value, Value::NativeFunction(_))
+        matches!(value, Value::LoxClosure(_))
+            || matches!(value, Value::LoxFunction(_))
+            || matches!(value, Value::NativeFunction(_))
     }
 
     pub fn is_string(&self) -> bool {
