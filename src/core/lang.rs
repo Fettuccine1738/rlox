@@ -1,4 +1,5 @@
 use crate::core::chunk::Chunk;
+use crate::runtime::vm::RtimeUpValue;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -91,19 +92,37 @@ pub enum FunctionType {
     Script,
 }
 
+/// Different closures may have different number of upvalues.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Closure {
     pub function: Rc<Function>,
+    pub upvalues: Vec<Option<RtimeUpValue>>,
+    /// this is stored incase GC cleans up function.
+    pub upvalue_count: usize,
 }
 
 impl Closure {
     pub fn new(func: Rc<Function>) -> Self {
-        Self { function: func }
+        let count = func.upvalue_count;
+        // per Bob; careful dance to please the garbage collector.
+        let upvalues_init = std::iter::from_fn(|| None)
+            .take(count)
+            .collect::<Vec<Option<RtimeUpValue>>>();
+        Self {
+            function: func,
+            upvalues: upvalues_init,
+            upvalue_count: count,
+        }
     }
 
     pub fn clone(func: &Rc<Function>) -> Self {
+        let upvalues_init = std::iter::from_fn(|| None)
+            .take(func.upvalue_count)
+            .collect::<Vec<Option<RtimeUpValue>>>();
         Self {
             function: func.clone(),
+            upvalues: upvalues_init,
+            upvalue_count: func.upvalue_count,
         }
     }
 }

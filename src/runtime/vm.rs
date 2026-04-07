@@ -98,6 +98,7 @@ impl VM {
         self.call_frames.last_mut().unwrap()
     }
 
+    // short lived calls to please the borrow checker.
     fn get_current_frame(&self) -> &CallFrame {
         self.call_frames.last().unwrap()
     }
@@ -291,11 +292,33 @@ impl VM {
                     let function = Value::as_function(&value);
                     let closure = Closure::clone(&function);
                     self.stack.push(Value::LoxClosure(Rc::new(closure)));
+
+                    for i in 0..closure.upvalue_count {
+                    // encoding [is_long][idx_1b or idx_3b][is_local]
+                    let is_long = self.read_byte();
+                    let index = if is_long == 1 {
+                        let bytes = self.read_3_bytes();
+                        let index = Chunk::inverse_resolve(bytes[0], bytes[1], bytes[2]);
+                        index
+                    } else {
+                        self.read_byte() as usize
+                    };
+
+                    let is_local: bool = self.read_byte() == 1;
+                    let slot_offset = self.get_current_frame().slots;
+                    closure.upvalues[i] = if is_local {
+                        let value = self.stack[slot_offset + index];
+                        Some(self.capture_upvalue(&value))
+                     } else {
+                       self.get_current_frame_mut().closure.upvalues[index];
+                     };
+                    }
                 }
                 _ => todo!(),
             }
         }
     }
+
 
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
@@ -323,6 +346,13 @@ impl VM {
         }
         self.runtime_error("Can only call functions and classes.");
         false
+    }
+
+    fn capture_upvalue(&mut self, local: &Value) -> RtimeUpValue {
+        // let created_upvalue = RtimeUpValue {
+        //     location: Rc::new(RefCell::new())
+        // }
+        todo!()
     }
 
     // takes name of function and the Funtion ptr
@@ -427,6 +457,17 @@ impl VM {
         *byte_code
     }
 
+    fn read_3_bytes(&mut self) -> &[u8] {
+        let call_frame = self.call_frames.last_mut().unwrap();
+        let bytes: &[u8] = &call_frame
+            .closure
+            .function
+            .chunk
+            .code[call_frame.ip..call_frame.ip + 3];
+        call_frame.ip += 3; // point to next byte_code.
+        bytes
+    }
+
     fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Option<Value> {
         match opcode {
             OpCode::Add => lhs.add(rhs),
@@ -446,6 +487,29 @@ impl VM {
         match self.read_constant() {
             Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
+        }
+    }
+}
+
+// runtime representation of UpValues
+use std::cell::RefCell;
+/// Multiple closures can close over the same variable, so we never
+/// own the variable it references.
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct RtimeUpValue {
+    pub location: Rc<RefCell<Value>>,
+}
+
+impl RtimeUpValue {
+    pub fn new(value: Value) -> Self {
+        Self {
+            location: Rc::new(RefCell::new(value)),
+        }
+    }
+
+    pub fn clone(value: Rc<RefCell<Value>>) -> Self {
+        Self {
+            location: Rc::clone(&value),
         }
     }
 }
