@@ -99,7 +99,7 @@ impl<'src> Compiler<'src> {
             name: Token::default(),
             depth: 0,
             is_const: false,
-            is_captured: false
+            is_captured: false,
         });
 
         compiler.parser.borrow_mut().advance();
@@ -500,9 +500,9 @@ impl<'src> Compiler<'src> {
             }
         }
 
-        // a function cannot capture more than 255 upvalues. 
+        // a function cannot capture more than 255 upvalues.
         // operand to `OpCode::GetUpValue` and `OpCode::SetUpValue` is u8
-        // an index into this upvalue array. 
+        // an index into this upvalue array.
         if self.upvalues.len() == FUNCTION_ARG_MAX as usize {
             self.parser
                 .borrow_mut()
@@ -749,7 +749,7 @@ impl<'src> Compiler<'src> {
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
 
-        // iterate through locals and emit code if used by any nested 
+        // iterate through locals and emit code if used by any nested
         // functions.
         while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth
         {

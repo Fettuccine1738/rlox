@@ -163,7 +163,7 @@ impl Chunk {
             }
             OpCode::GetUpValue => chunk.byte_instruction("OP_GET_VALUE", offset),
             OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset),
-            OpCode::CloseUpValue => Self::simple_instruction("OP_CLOSE_VALUE", offset)
+            OpCode::CloseUpValue => Self::simple_instruction("OP_CLOSE_VALUE", offset),
         }
     }
 

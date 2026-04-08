@@ -36,7 +36,7 @@ pub enum InterpretResult {
 pub struct VM {
     stack: Vec<Value>,
     globals: HashTable,
-    call_frames: Vec<CallFrame>, 
+    call_frames: Vec<CallFrame>,
     // when a varialbe moves to the heap, all closures capturing that variable
     // retain a reference  to its one new location. That way when th variable is mutated
     // all closures see the change.
@@ -55,7 +55,7 @@ impl VM {
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
-            open_upvalues: HashMap::new()
+            open_upvalues: HashMap::new(),
         }
     }
 
@@ -298,42 +298,44 @@ impl VM {
                     let mut closure = Closure::clone(&function);
 
                     for i in 0..closure.upvalue_count {
-                    // encoding [is_long][idx_1b or idx_3b][is_local]
-                    let is_long = self.read_byte();
-                    let index = if is_long == 1 {
-                        let bytes = self.read_3_bytes();
-                        let index = Chunk::inverse_resolve(bytes[0], bytes[1], bytes[2]);
-                        index
-                    } else {
-                        self.read_byte() as usize
-                    };
+                        // encoding [is_long][idx_1b or idx_3b][is_local]
+                        let is_long = self.read_byte();
+                        let index = if is_long == 1 {
+                            let bytes = self.read_3_bytes();
+                            let index = Chunk::inverse_resolve(bytes[0], bytes[1], bytes[2]);
+                            index
+                        } else {
+                            self.read_byte() as usize
+                        };
 
-                    let is_local: bool = self.read_byte() == 1;
-                    let slot_offset = self.get_current_frame().slots;
-                    closure.upvalues[i] = if is_local {
-                        self.capture_upvalue(slot_offset + index)
-                     } else {
-                       self.get_current_frame_mut().closure.upvalues[index].clone()
-                     };
+                        let is_local: bool = self.read_byte() == 1;
+                        let slot_offset = self.get_current_frame().slots;
+                        closure.upvalues[i] = if is_local {
+                            self.capture_upvalue(slot_offset + index)
+                        } else {
+                            self.get_current_frame_mut().closure.upvalues[index].clone()
+                        };
                     }
                     // FIXME: although unlikely push this here means a recursive inner function here might break
-                    // because capture_upvalue will not be able to ind this on the stack. 
+                    // because capture_upvalue will not be able to ind this on the stack.
                     self.stack.push(Value::LoxClosure(Rc::new(closure)));
                 }
                 OpCode::GetUpValue => {
-                        // operand is the index into the current function's upvalue array.
-                        let slot = self.read_byte();
-                        let call_frame = self.get_current_frame(); 
-                        let upvalue = &call_frame.closure.upvalues[slot as usize];
-                        let value = upvalue.location.borrow().clone();
-                        self.stack.push(value);
-                    }
+                    // operand is the index into the current function's upvalue array.
+                    let slot = self.read_byte();
+                    let call_frame = self.get_current_frame();
+                    let upvalue = &call_frame.closure.upvalues[slot as usize];
+                    let value = upvalue.location.borrow().clone();
+                    self.stack.push(value);
+                }
                 OpCode::SetUpValue => {
-                        let slot = self.read_byte();
-                        let peek_value = self.peek(0);
-                        let callframe = self.get_current_frame_mut(); 
-                        *callframe.closure.upvalues[slot as usize].location.borrow_mut() = peek_value;
-                        // assignment is an expression in Lox. so the assigned value remains on the stack.
+                    let slot = self.read_byte();
+                    let peek_value = self.peek(0);
+                    let callframe = self.get_current_frame_mut();
+                    *callframe.closure.upvalues[slot as usize]
+                        .location
+                        .borrow_mut() = peek_value;
+                    // assignment is an expression in Lox. so the assigned value remains on the stack.
                 }
                 OpCode::CloseUpValue => {
                     self.close_upvalue(self.stack.len() - 1);
@@ -342,7 +344,6 @@ impl VM {
             }
         }
     }
-
 
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
@@ -376,7 +377,9 @@ impl VM {
     /// else creates a new rumtime representation for it.
     fn capture_upvalue(&mut self, index: usize) -> RtimeUpValue {
         if let Some(existing) = self.open_upvalues.get(&index) {
-            RtimeUpValue { location: Rc::clone(existing) };
+            RtimeUpValue {
+                location: Rc::clone(existing),
+            };
         }
 
         let value = self.stack[index].clone();
@@ -392,7 +395,7 @@ impl VM {
     /// IN Clox, the pointer to the closed value points to locations referent.
     /// we don't need this since location is already an Rc and maintains a reference to it.
     fn close_upvalue(&mut self, index: usize) {
-        self.open_upvalues.retain(|&slot, _|  slot < index);
+        self.open_upvalues.retain(|&slot, _| slot < index);
     }
 
     // takes name of function and the Funtion ptr
@@ -499,11 +502,8 @@ impl VM {
 
     fn read_3_bytes(&mut self) -> &[u8] {
         let call_frame = self.call_frames.last_mut().unwrap();
-        let bytes: &[u8] = &call_frame
-            .closure
-            .function
-            .chunk
-            .code[call_frame.ip..call_frame.ip + 3];
+        let bytes: &[u8] =
+            &call_frame.closure.function.chunk.code[call_frame.ip..call_frame.ip + 3];
         call_frame.ip += 3; // point to next byte_code.
         bytes
     }
@@ -544,12 +544,12 @@ pub struct RtimeUpValue {
 /// Open UpValue refer to an upvalue that points to a local variable still on the stack.
 /// Closed refers to a variable moved to the Heap.
 enum UpValueState {
-    Open(usize),  // index into the vm's stack.
-    Closed(Value)
+    Open(usize), // index into the vm's stack.
+    Closed(Value),
 }
 
 pub struct ObjUpValue {
-    state: Rc<RefCell<UpValueState>>
+    state: Rc<RefCell<UpValueState>>,
 }
 
 impl RtimeUpValue {

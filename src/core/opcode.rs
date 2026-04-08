@@ -31,8 +31,6 @@ pub enum OpCode {
     JumpIfFalse = 23,
     Jump = 24,
     Loop = 25,
-    // immutable variables from Challenges Ch:22
-    // we don't need this opcode although it is cool to see the vm recognize it is a constant.
     Call = 26,
     Closure = 27,
     GetUpValue = 28,
