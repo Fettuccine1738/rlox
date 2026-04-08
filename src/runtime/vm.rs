@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::HashMap;
 use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
@@ -35,9 +36,12 @@ pub enum InterpretResult {
 pub struct VM {
     stack: Vec<Value>,
     globals: HashTable,
-    call_frames: Vec<CallFrame>, // for gc ..
-                                 // Box::automatically deallocates objects on the heap.
-                                 // objects: LinkedList<Value>
+    call_frames: Vec<CallFrame>, 
+    // when a varialbe moves to the heap, all closures capturing that variable
+    // retain a reference  to its one new location. That way when th variable is mutated
+    // all closures see the change.
+    open_upvalues: HashMap<usize, Rc<RefCell<Value>>>,
+    // dummy: *mut * mut Value
 }
 
 impl VM {
@@ -51,6 +55,7 @@ impl VM {
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
+            open_upvalues: vec![]
         }
     }
 
@@ -290,8 +295,7 @@ impl VM {
                 OpCode::Closure => {
                     let value = self.read_constant();
                     let function = Value::as_function(&value);
-                    let closure = Closure::clone(&function);
-                    self.stack.push(Value::LoxClosure(Rc::new(closure)));
+                    let mut closure = Closure::clone(&function);
 
                     for i in 0..closure.upvalue_count {
                     // encoding [is_long][idx_1b or idx_3b][is_local]
@@ -307,12 +311,32 @@ impl VM {
                     let is_local: bool = self.read_byte() == 1;
                     let slot_offset = self.get_current_frame().slots;
                     closure.upvalues[i] = if is_local {
-                        let value = self.stack[slot_offset + index];
-                        Some(self.capture_upvalue(&value))
+                        self.capture_upvalue(slot_offset + index)
                      } else {
-                       self.get_current_frame_mut().closure.upvalues[index];
+                       self.get_current_frame_mut().closure.upvalues[index].clone()
                      };
                     }
+                    // FIXME: although unlikely push this here means a recursive inner function here might break
+                    // because capture_upvalue will not be able to ind this on the stack. 
+                    self.stack.push(Value::LoxClosure(Rc::new(closure)));
+                }
+                OpCode::GetUpValue => {
+                        // operand is the index into the current function's upvalue array.
+                        let slot = self.read_byte();
+                        let call_frame = self.get_current_frame(); 
+                        let upvalue = &call_frame.closure.upvalues[slot as usize];
+                        let value = upvalue.location.borrow().clone();
+                        self.stack.push(value);
+                    }
+                OpCode::SetUpValue => {
+                        let slot = self.read_byte();
+                        let peek_value = self.peek(0);
+                        let callframe = self.get_current_frame_mut(); 
+                        *callframe.closure.upvalues[slot as usize].location.borrow_mut() = peek_value;
+                        // assignment is an expression in Lox. so the assigned value remains on the stack.
+                }
+                OpCode::CloseUpValue => {
+                    self.close_upvalue(self.stack.len() - 1);
                 }
                 _ => todo!(),
             }
@@ -348,11 +372,27 @@ impl VM {
         false
     }
 
-    fn capture_upvalue(&mut self, local: &Value) -> RtimeUpValue {
+    /// checks if a closure already captured an UpValue and resuses if true.
+    /// else creates a new rumtime representation for it.
+    fn capture_upvalue(&mut self, index: usize) -> RtimeUpValue {
+        if let Some(existing) = self.open_upvalues.get(&index) {
+            RtimeUpValue { location: Rc::clone(existing) };
+        }
+
+        let value = self.stack[index].clone();
+        let shared = Rc::new(RefCell::new(value));
         // let created_upvalue = RtimeUpValue {
-        //     location: Rc::new(RefCell::new())
-        // }
-        todo!()
+        //     location: Rc::new(RefCell::new(unsafe {(*local).clone()}))
+        // };
+        self.open_upvalues.insert(index, Rc::clone(&shared));
+        RtimeUpValue { location: shared }
+    }
+
+    /// closes every open upvalue that sits above this index.
+    /// IN Clox, the pointer to the closed value points to locations referent.
+    /// we don't need this since location is already an Rc and maintains a reference to it.
+    fn close_upvalue(&mut self, index: usize) {
+        self.open_upvalues.retain(|&slot, _|  slot < index);
     }
 
     // takes name of function and the Funtion ptr
@@ -497,7 +537,19 @@ use std::cell::RefCell;
 /// own the variable it references.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct RtimeUpValue {
+    // FIXME: this feels like over kill.
     pub location: Rc<RefCell<Value>>,
+}
+
+/// Open UpValue refer to an upvalue that points to a local variable still on the stack.
+/// Closed refers to a variable moved to the Heap.
+enum UpValueState {
+    Open(usize),  // index into the vm's stack.
+    Closed(Value)
+}
+
+pub struct ObjUpValue {
+    state: Rc<RefCell<UpValueState>>
 }
 
 impl RtimeUpValue {

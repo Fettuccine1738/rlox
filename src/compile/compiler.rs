@@ -6,7 +6,6 @@ use super::parser::Parser;
 use super::token::Kind;
 use crate::compile::token::Token;
 use crate::core::chunk::Chunk;
-use crate::core::lang::Closure;
 use crate::core::opcode::OpCode;
 use crate::core::{lang::Function, lang::FunctionType, value::Value};
 use crate::data_structures::interner::{self};
@@ -24,6 +23,8 @@ pub struct Local<'src> {
     // Sentinel -1 means this local is uninitialized.
     depth: i32,
     is_const: bool,
+    // true if this local is captured by any later nested function declaratoin.
+    is_captured: bool,
 }
 
 // NOTE: when to name the lifetime when creating impl blocks.
@@ -98,6 +99,7 @@ impl<'src> Compiler<'src> {
             name: Token::default(),
             depth: 0,
             is_const: false,
+            is_captured: false
         });
 
         compiler.parser.borrow_mut().advance();
@@ -302,6 +304,7 @@ impl<'src> Compiler<'src> {
             name: Token::default(),
             depth: 0,
             is_const: false,
+            is_captured: false,
         });
 
         if !inner.check(Kind::RightParen) {
@@ -447,7 +450,7 @@ impl<'src> Compiler<'src> {
     fn resolve_local(&mut self, name: &Token) -> Option<(usize, bool)> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
-                if local.depth == -1 {
+                if !local.is_initialized() {
                     self.parser
                         .borrow_mut()
                         .error("Can't read local variable in its own initializer.");
@@ -473,7 +476,8 @@ impl<'src> Compiler<'src> {
         let local: Option<(usize, bool)> = enclosing.resolve_local(name);
         // index refers to the index of the slot in its the enclosing locals
         if let Some((index, is_const)) = local {
-            // value_index is the index of the captured up value in its own upvalues array.
+            // value_index is the index of the captured up value in its own local array.
+            enclosing.locals[index].is_captured = true;
             let value_index = self.add_upvalue(index, true);
             return Some((value_index, is_const));
         }
@@ -496,6 +500,9 @@ impl<'src> Compiler<'src> {
             }
         }
 
+        // a function cannot capture more than 255 upvalues. 
+        // operand to `OpCode::GetUpValue` and `OpCode::SetUpValue` is u8
+        // an index into this upvalue array. 
         if self.upvalues.len() == FUNCTION_ARG_MAX as usize {
             self.parser
                 .borrow_mut()
@@ -743,9 +750,15 @@ impl<'src> Compiler<'src> {
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
 
+        // iterate through locals and emit code if used by any nested 
+        // functions.
         while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth
         {
-            self.emit_opcode(OpCode::Pop);
+            if self.locals.last().unwrap().is_captured {
+                self.emit_opcode(OpCode::CloseUpValue);
+            } else {
+                self.emit_opcode(OpCode::Pop);
+            }
             self.locals.pop(); // discard this value.
         }
     }
