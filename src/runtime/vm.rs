@@ -359,7 +359,7 @@ impl VM {
                             // let trunc = self.stack.len() - (arg_start + 1);
                             self.stack.truncate(arg_start - 1); // remove function and its arguments.
                             self.push_value(result);
-                            true;
+                            return true;
                         }
                         Err(e) => self.runtime_error(&e.to_string()),
                     }

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::fmt::format;
 use std::rc::Rc;
 use std::{mem, usize};
 
@@ -477,7 +478,7 @@ impl<'src> Compiler<'src> {
         // index refers to the index of the slot in its the enclosing locals
         if let Some((index, is_const)) = local {
             // value_index is the index of the captured up value in its own local array.
-            enclosing.locals[index].is_captured = true;
+            (*enclosing).locals[index].is_captured = true;
             let value_index = self.add_upvalue(index, true);
             return Some((value_index, is_const));
         }
@@ -946,9 +947,10 @@ impl<'src> Compiler<'src> {
                 if crate::std::is_native_call(name) {
                     return index;
                 }
+                let err_msg = format!("undeclared variable `{}` is being assigned to.", name);
                 self.parser
                     .borrow_mut()
-                    .error_at_current("undeclared variable is being assinged to.");
+                    .error_at_current(&err_msg);
                 index
             }
         }

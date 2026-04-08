@@ -55,7 +55,7 @@ impl<'src> Parser<'src> {
     }
 
     /// --------------error handling--------------
-    pub fn error_at_current(&mut self, message: &'static str) {
+    pub fn error_at_current(&mut self, message: &str) {
         self.error_at(self.current.clone(), message);
     }
 

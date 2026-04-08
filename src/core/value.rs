@@ -138,16 +138,16 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Value::Boolean(b) => write!(f, "{}", b),
-            Value::Number(n) => write!(f, "{}", n),
+            Value::Boolean(b) => write!(f, "`{}`", b),
+            Value::Number(n) => write!(f, "`{}`", n),
             Value::Nil => write!(f, "NIL"),
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
-                write!(f, ":{}", s)
+                write!(f, "`{}`", s)
             }
-            Value::NativeFunction(n) => write!(f, "{}", n),
-            Value::LoxFunction(n) => write!(f, "{}", n),
-            Value::LoxClosure(c) => write!(f, "{}", c.function),
+            Value::NativeFunction(n) => write!(f, "`{}()`", n),
+            Value::LoxFunction(n) => write!(f, "`{}`", n),
+            Value::LoxClosure(c) => write!(f, "`{}`", c.function),
             _ => todo!(),
         }
     }
