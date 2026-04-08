@@ -32,13 +32,12 @@ pub enum OpCode {
     Jump = 24,
     Loop = 25,
     // immutable variables from Challenges Ch:22
-    ConstGlobal = 26,
-    ConstLocal = 27,
-    Call = 28,
-    Closure = 29,
-    GetUpValue = 30,
-    SetUpValue = 31,
-    CloseUpValue = 32,
+    // we don't need this opcode although it is cool to see the vm recognize it is a constant.
+    Call = 26,
+    Closure = 27,
+    GetUpValue = 28,
+    SetUpValue = 29,
+    CloseUpValue = 30,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -87,13 +86,11 @@ impl TryFrom<u8> for OpCode {
             23 => Ok(Self::JumpIfFalse),
             24 => Ok(Self::Jump),
             25 => Ok(Self::Loop),
-            26 => Ok(Self::ConstGlobal),
-            27 => Ok(Self::ConstLocal),
-            28 => Ok(Self::Call),
-            29 => Ok(Self::Closure),
-            30 => Ok(Self::GetUpValue),
-            31 => Ok(Self::SetUpValue),
-            32 => Ok(Self::CloseUpValue),
+            26 => Ok(Self::Call),
+            27 => Ok(Self::Closure),
+            28 => Ok(Self::GetUpValue),
+            29 => Ok(Self::SetUpValue),
+            30 => Ok(Self::CloseUpValue),
             _ => Err(()),
         }
     }

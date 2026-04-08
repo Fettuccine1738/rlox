@@ -525,7 +525,6 @@ impl<'src> Compiler<'src> {
         }
 
         if is_const {
-            // self.emit_opcode_operand(OpCode::ConstGlobal, global);
             self.const_globals.push(global); // compiler knows index at this slot is immutable
         }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);

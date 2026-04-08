@@ -217,7 +217,7 @@ impl VM {
                     let n: u8 = self.read_byte();
                     self.stack.truncate(n as usize);
                 }
-                OpCode::DefineGlobal | OpCode::ConstGlobal => {
+                OpCode::DefineGlobal => {
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string().unwrap();
                     // NOTE: Value is not popped directly off the stack.
