@@ -929,6 +929,7 @@ impl<'src> Compiler<'src> {
             name: token,
             depth: self.scope_depth,
             is_const: immutable,
+            is_captured: false,
         });
     }
 

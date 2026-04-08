@@ -55,7 +55,7 @@ impl VM {
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
-            open_upvalues: vec![]
+            open_upvalues: HashMap::new()
         }
     }
 
