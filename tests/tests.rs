@@ -175,7 +175,7 @@ pub mod test {
                         }
                         inner();
                     }
-                outer();";
+                    outer();";
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }

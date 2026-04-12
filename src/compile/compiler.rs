@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::fmt::format;
 use std::rc::Rc;
 use std::{mem, usize};
 
@@ -95,7 +94,7 @@ impl<'src> Compiler<'src> {
             upvalues: vec![],
         };
 
-        // why do we need this??
+        // we need this for alignment, the function then looks for params/ args starting from index 1.
         compiler.locals.push(Local {
             name: Token::default(),
             depth: 0,
@@ -492,7 +491,7 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    /// local = true means a value decalred in an immediate outerscope is captured.
+    /// local = true means a value declared in an immediate outerscope is captured.
     /// false means it captures the UpValue of some captured variable.
     fn add_upvalue(&mut self, index: usize, local: bool) -> usize {
         for (idx, upvalue) in self.upvalues.iter().enumerate() {
@@ -948,9 +947,7 @@ impl<'src> Compiler<'src> {
                     return index;
                 }
                 let err_msg = format!("undeclared variable `{}` is being assigned to.", name);
-                self.parser
-                    .borrow_mut()
-                    .error_at_current(&err_msg);
+                self.parser.borrow_mut().error_at_current(&err_msg);
                 index
             }
         }
