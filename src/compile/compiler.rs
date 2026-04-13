@@ -329,6 +329,14 @@ impl<'src> Compiler<'src> {
         inner.begin_scope();
         inner.consume(Kind::LeftBrace, "Expect '{' before function body.");
         inner.block();
+
+        // the enclosing bytes holds this closure and emits the bytes and operands
+        // to the closure in its own chunk.
+        let bytes_to_emit: Vec<(u8, u32)> = inner
+            .upvalues
+            .iter()
+            .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
+            .collect();
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
 
@@ -339,12 +347,6 @@ impl<'src> Compiler<'src> {
         // operand to this opcode, is the constant functions index in the constants table.
         self.emit_opcode_operand(OpCode::Closure, index);
 
-        // emit upvalues info stored.
-        let bytes_to_emit: Vec<(u8, u32)> = self
-            .upvalues
-            .iter()
-            .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
-            .collect();
 
         // variable encoding of the byte is now
         // [0 | 1 (is this index > 255)][idx_1b | idx_3b][is_local]

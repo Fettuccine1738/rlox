@@ -110,7 +110,7 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         for s in &self.stack {
-            println!("{:?}", s);
+            println!("{}", s);
         }
 
         loop {
@@ -287,13 +287,11 @@ impl VM {
                     self.get_current_frame_mut().ip -= offset as usize;
                 }
                 OpCode::Call => {
-                    let arity = self.read_byte();
+                    let arity = self.read_byte(); // only 256 args allowed, hence read_byte()
                     let function = self.peek(arity as usize);
                     if !self.call_value(function, arity) {
                         return InterpretResult::RuntimeError;
                     }
-                    // we are supposed to  update the old frame
-                    // frame = &vm.frames[vm.frame_count - 1];
                 }
                 OpCode::Closure => {
                     let value = self.read_constant();
@@ -301,7 +299,7 @@ impl VM {
                     let mut closure = Closure::clone(&function);
 
                     for i in 0..closure.upvalue_count {
-                        // encoding [is_long][idx_1b or idx_3b][is_local]
+                        // encoding [is_long (0 | 1)][(is_long == 0) ? idx_1b : idx_3b][is_local]
                         let is_long = self.read_byte();
                         let index = if is_long == 1 {
                             let bytes = self.read_3_bytes();
@@ -319,8 +317,6 @@ impl VM {
                             self.get_current_frame_mut().closure.upvalues[index].clone()
                         };
                     }
-                    // FIXME: although unlikely push this here means a recursive inner function here might break
-                    // because capture_upvalue will not be able to ind this on the stack.
                     self.stack.push(Value::LoxClosure(Rc::new(closure)));
                 }
                 OpCode::GetUpValue => {
@@ -431,7 +427,7 @@ impl VM {
         // ^      | -------args to fn ------
         // slots points here (slot 0 = the function being called)
         self.call_frames.push(CallFrame {
-            closure: clojure.clone(),
+            closure: clojure.clone(), // note rc cloned before passing in, use clojure.
             ip: 0,
             slots: self.stack.len() - arity as usize - 1,
         });
@@ -538,7 +534,7 @@ impl VM {
 use std::cell::RefCell;
 /// Multiple closures can close over the same variable, so we never
 /// own the variable it references.
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, Default, PartialEq, PartialOrd, Clone)]
 pub struct RtimeUpValue {
     // FIXME: this feels like over kill.
     pub location: Rc<RefCell<Value>>,

@@ -16,9 +16,10 @@ use crate::{
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum Value {
     Boolean(bool),
+    #[default]
     Nil,
     Number(f64),
     LoxFunction(Rc<crate::core::lang::Function>),

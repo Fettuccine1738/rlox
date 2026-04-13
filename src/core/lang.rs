@@ -59,11 +59,12 @@ impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "fn {}",
+            "fn {} \n {}",
             match &self.name {
                 Some(s) => s,
                 None => "Script",
-            }
+            },
+            self.chunk
         )
     }
 }
@@ -106,24 +107,33 @@ impl Closure {
     pub fn new(func: Rc<Function>) -> Self {
         let count = func.upvalue_count;
         // per Bob; careful dance to please the garbage collector.
-        // let upvalues_init = std::iter::from_fn(|| None)
-        //     .take(count)
-        //     .collect::<Vec<Option<RtimeUpValue>>>();
+        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
+            .take(count)
+            .collect::<Vec<RtimeUpValue>>();
+
         Self {
             function: func,
-            upvalues: vec![],
+            upvalues: upvalues_init,
             upvalue_count: count,
         }
     }
 
     pub fn clone(func: &Rc<Function>) -> Self {
-        // let upvalues_init = std::iter::from_fn(|| None)
-        //     .take(func.upvalue_count)
-        //     .collect::<Vec<Option<RtimeUpValue>>>();
+        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
+            .take(func.upvalue_count)
+            .collect::<Vec<RtimeUpValue>>();
         Self {
             function: func.clone(),
-            upvalues: vec![],
+            upvalues: upvalues_init,
             upvalue_count: func.upvalue_count,
         }
+    }
+}
+
+impl Display for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "function: {} \n UPVALUES: {:?}\n", self.function, self.upvalues)
     }
 }
