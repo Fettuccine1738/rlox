@@ -1,6 +1,8 @@
 use crate::core::chunk::Chunk;
+use crate::runtime::vm::RtimeUpValue;
 use std::fmt::Display;
 use std::rc::Rc;
+use std::vec;
 
 /// NOTE: move to object.rs once complexity increases.
 #[derive(Debug, Clone)]
@@ -10,6 +12,7 @@ pub struct Function {
     pub arity: u8,
     pub chunk: Chunk,
     pub name: Option<String>,
+    pub upvalue_count: usize,
 }
 
 impl PartialEq for Function {
@@ -39,20 +42,29 @@ impl PartialOrd for Function {
 /// points into the VM's value stack at the first slot that this function
 /// can use.
 pub struct CallFrame {
-    pub function: Rc<Function>,
+    pub closure: Rc<Closure>,
     pub ip: usize,
     pub slots: usize, // offset
+}
+
+impl CallFrame {
+    /// this is required to know if the operand to an opcode is the
+    /// next byte or the next three bytes (lots of constants in chunks.)
+    pub fn read_long(&self) -> bool {
+        self.ip >= self.closure.function.chunk.index_const24
+    }
 }
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "fn {}",
+            "fn {} \n {}",
             match &self.name {
                 Some(s) => s,
                 None => "Script",
-            }
+            },
+            self.chunk
         )
     }
 }
@@ -69,6 +81,7 @@ impl Function {
             arity: 0,
             name: None,
             chunk: Chunk::new(),
+            upvalue_count: 0,
         }
     }
 }
@@ -79,4 +92,48 @@ pub enum FunctionType {
     Function,
     #[default]
     Script,
+}
+
+/// Different closures may have different number of upvalues.
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Closure {
+    pub function: Rc<Function>,
+    pub upvalues: Vec<RtimeUpValue>,
+    /// this is stored incase GC cleans up function.
+    pub upvalue_count: usize,
+}
+
+impl Closure {
+    pub fn new(func: Rc<Function>) -> Self {
+        let count = func.upvalue_count;
+        // per Bob; careful dance to please the garbage collector.
+        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
+            .take(count)
+            .collect::<Vec<RtimeUpValue>>();
+
+        Self {
+            function: func,
+            upvalues: upvalues_init,
+            upvalue_count: count,
+        }
+    }
+
+    pub fn clone(func: &Rc<Function>) -> Self {
+        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
+            .take(func.upvalue_count)
+            .collect::<Vec<RtimeUpValue>>();
+        Self {
+            function: func.clone(),
+            upvalues: upvalues_init,
+            upvalue_count: func.upvalue_count,
+        }
+    }
+}
+
+impl Display for Closure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "function: {} \n UPVALUES: {:?}\n", self.function, self.upvalues)
+    }
 }

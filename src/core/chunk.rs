@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{core::opcode::*, core::value::Value, data_structures::interner};
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq)]
 pub struct Line(pub u32);
@@ -12,11 +14,21 @@ pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
     pub lines: Vec<Line>,
-    // index_const24 records the size of the bytecode array when the constants pool
+    // HACK: index_const24 records the size of the bytecode array when the constants pool
     // exceeds 255 (the value at which Constant24 must be used as the operand to store and read constants.)
     // this allows the compiler & vm to compare the instruction ptr with this size
     // if the ip is >= index_const24 we have to read the next 3 bytes to get the correct index.
     pub index_const24: usize,
+}
+
+impl Display for Chunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "\nindex_const24 = {} \n {:?}\n {:?}",
+            self.index_const24, self.code, self.constants
+        )
+    }
 }
 
 impl Chunk {
@@ -114,13 +126,56 @@ impl Chunk {
                 println!("OP_GET_LOCAL {:04}", chunk.constants[(slot - 1) as usize]);
                 offset + 2
             }
-            OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset),
+            OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset, true),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
-            OpCode::ConstGlobal => chunk.byte_instruction("OP_CONST_GLOBAL", offset),
-            OpCode::ConstLocal => chunk.byte_instruction("OP_CONST_LOCAL", offset),
-            OpCode::Call => chunk.byte_instruction("OP_CALL", offset),
+            OpCode::Call => chunk.byte_instruction("OP_CALL", offset, true),
+            OpCode::Closure => {
+                let (mut off_t, constant) = if offset < chunk.index_const24 {
+                    (offset + 2, chunk.code[offset + 1] as usize)
+                } else {
+                    let bytes = &chunk.code[offset + 1..offset + 4];
+                    let index = Self::inverse_resolve(bytes[0], bytes[1], bytes[2]);
+                    (offset + 4, index)
+                };
+                println!("OP_CLOSURE {:04}", constant);
+                let function = Value::as_function(&chunk.constants[constant as usize]);
+                for _ in 0..function.upvalue_count {
+                    // encoding [is_long][idx_1b or idx_3b][is_local]
+                    // is_long ? idx_3b : idx_1b (3b = 3bytes. upvalue may point to slot > 255.)
+                    let is_long = chunk.code[off_t];
+                    off_t += 1;
+
+                    let index: usize = if is_long == 1 {
+                        let index = Self::inverse_resolve(
+                            chunk.code[off_t],
+                            chunk.code[off_t + 1],
+                            chunk.code[off_t + 2],
+                        );
+                        off_t += 3;
+                        index
+                    } else {
+                        let index = chunk.code[off_t] as usize;
+                        off_t += 1;
+                        index
+                    };
+
+                    let is_local = chunk.code[off_t];
+                    off_t += 1;
+
+                    println!(
+                        "{:04}    |              {} {}",
+                        off_t - 2,
+                        if is_local == 1 { " local" } else { "upvalue" },
+                        index
+                    );
+                }
+                off_t
+            }
+            OpCode::GetUpValue => chunk.byte_instruction("OP_GET_VALUE", offset, true), // operand is code pool
+            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset, true), // also here
+            OpCode::CloseUpValue => Self::simple_instruction("OP_CLOSE_VALUE", offset),
         }
     }
 
@@ -129,9 +184,19 @@ impl Chunk {
         offset + 1
     }
 
-    fn byte_instruction(&self, name: &str, offset: usize) -> usize {
+    /// in_const_pool = true, if the operand to this bytecode is an index to the constants pool
+    /// For some instructions like closures, the index points into the runtime structure.
+    /// causing index out of bounds.
+    fn byte_instruction(&self, name: &str, offset: usize, in_const_pool: bool) -> usize {
+        // the operand to this opcode is not always in the constants pool, it may be an index
+        // in the upvalues or locals list of another function
         let slot = self.code[offset + 1];
-        println!("{}s {:04}", name, self.constants[slot as usize]);
+        print!("{name} \t");
+        if in_const_pool {
+            println!("{:04}", slot);
+        } else {
+            println!("{}", slot);
+        }
         offset + 2
     }
 
@@ -222,5 +287,9 @@ impl Chunk {
         let bits16 = ((bits >> 16) & 0xFF) as u8;
 
         (bits0_7, bits8_15, bits16)
+    }
+
+    pub fn inverse_resolve(bits0_7: u8, bits8_15: u8, bits16: u8) -> usize {
+        ((bits16 as usize) << 16) | ((bits8_15 as usize) << 8) | (bits0_7 as usize)
     }
 }

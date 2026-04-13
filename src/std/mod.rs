@@ -65,6 +65,7 @@ pub mod math {
             _ => Err(VmError::Runtime("Expected type number.".to_string())),
         }
     }
+
     pub fn max(arg_count: usize, nums: &[Value]) -> VmResult {
         // arity checking.
         let start = nums

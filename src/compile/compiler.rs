@@ -23,6 +23,8 @@ pub struct Local<'src> {
     // Sentinel -1 means this local is uninitialized.
     depth: i32,
     is_const: bool,
+    // true if this local is captured by any later nested function declaratoin.
+    is_captured: bool,
 }
 
 // NOTE: when to name the lifetime when creating impl blocks.
@@ -39,6 +41,16 @@ impl Local<'_> {
     pub fn is_immutable(&self) -> bool {
         self.is_const
     }
+}
+
+/// index stores which local slot the upvalue is capturing.
+/// HACK: this should be an index since we already allow > 255 constants
+/// is_local: is true if it captures a local in its immediate scope.
+/// false if capturing an UpValue from the outer scope.
+#[derive(Debug)]
+pub struct UpValue {
+    index: u32,
+    is_local: bool,
 }
 
 // the source string should not be 'static because you don't want to require that
@@ -58,6 +70,7 @@ pub struct Compiler<'src> {
     function: Function,
     function_type: FunctionType,
     enclosing: Option<Box<Compiler<'src>>>,
+    upvalues: Vec<UpValue>,
 }
 
 impl<'src> Compiler<'src> {
@@ -71,20 +84,22 @@ impl<'src> Compiler<'src> {
             // reference to the outer parser is needed to continue the single pass.
             parser: Rc::new(RefCell::new(Parser::new(source))),
             scope_depth: 0,
-            locals: Vec::new(),
-            const_globals: Vec::new(),
+            locals: vec![],
+            const_globals: vec![],
             // interior mutabliity, this is so we can return the function after compiling
             // and don't have to worry about `dangling` ptr once compile is finished.
             function: Function::new(),
             function_type: FunctionType::default(),
             enclosing: None,
+            upvalues: vec![],
         };
 
-        // why do we need this??
+        // we need this for alignment, the function then looks for params/ args starting from index 1.
         compiler.locals.push(Local {
             name: Token::default(),
             depth: 0,
             is_const: false,
+            is_captured: false,
         });
 
         compiler.parser.borrow_mut().advance();
@@ -281,6 +296,7 @@ impl<'src> Compiler<'src> {
             function: Function::new(),
             function_type: func_type,
             enclosing: Some(Box::new(enclosing)),
+            upvalues: vec![],
         };
 
         inner.function.name = Some(function_name.to_owned());
@@ -288,6 +304,7 @@ impl<'src> Compiler<'src> {
             name: Token::default(),
             depth: 0,
             is_const: false,
+            is_captured: false,
         });
 
         if !inner.check(Kind::RightParen) {
@@ -312,20 +329,43 @@ impl<'src> Compiler<'src> {
         inner.begin_scope();
         inner.consume(Kind::LeftBrace, "Expect '{' before function body.");
         inner.block();
+
+        // the enclosing bytes holds this closure and emits the bytes and operands
+        // to the closure in its own chunk.
+        let bytes_to_emit: Vec<(u8, u32)> = inner
+            .upvalues
+            .iter()
+            .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
+            .collect();
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
 
+        // value is stored as function but used a closure.
         let index: usize = self
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
-        self.emit_opcode_operand(
+        // operand to this opcode, is the constant functions index in the constants table.
+        self.emit_opcode_operand(OpCode::Closure, index);
+
+
+        // variable encoding of the byte is now
+        // [0 | 1 (is this index > 255)][idx_1b | idx_3b][is_local]
+        for (is_local, index) in bytes_to_emit {
             if index > 255 {
-                OpCode::Constant24
+                // is_long flag (used in cases where the captured variable) means
+                // is the (255+th) variable in the captured local or upvalue.
+                self.emit_byte(1);
+                // emit 3 bytes
+                let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(index as usize);
+                self.emit_byte(bits0_7);
+                self.emit_byte(bits8_15);
+                self.emit_byte(bits16);
             } else {
-                OpCode::Constant
-            },
-            index,
-        );
+                self.emit_byte(0); // !is_long index into upvalues or locals.
+                self.emit_byte(index as u8);
+            }
+            self.emit_byte(is_local);
+        }
     }
 
     fn call(&mut self) {
@@ -377,21 +417,22 @@ impl<'src> Compiler<'src> {
 
     fn named_variable(&mut self, name: Token, can_assign: bool) {
         let (get_op, set_op, arg, is_const) = match self.resolve_local(&name) {
-            Some(index) => (
-                OpCode::GetLocal,
-                OpCode::SetLocal,
-                index,
-                self.locals[index].is_const,
-            ),
-            None => {
-                let idx: usize = self.identifier_constant(name);
-                (
-                    OpCode::GetGlobal,
-                    OpCode::SetGlobal,
-                    idx,
-                    self.const_globals.contains(&idx),
-                )
-            }
+            Some((index, is_const)) => (OpCode::GetLocal, OpCode::SetLocal, index, is_const),
+            None => match self.resolve_upvalue(&name) {
+                // NOTE: index refers to index in different tables.
+                // for UpValue, it is the index in the upvalues array.
+                Some((idx, is_const)) => (OpCode::GetUpValue, OpCode::SetUpValue, idx, is_const),
+                _ => {
+                    // here it is the index in its chunk constants pool.
+                    let idx: usize = self.identifier_constant(name);
+                    (
+                        OpCode::GetGlobal,
+                        OpCode::SetGlobal,
+                        idx,
+                        self.const_globals.contains(&idx),
+                    )
+                }
+            },
         };
 
         if can_assign && self.match_token(Kind::Equal) {
@@ -408,18 +449,74 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    fn resolve_local(&mut self, name: &Token) -> Option<usize> {
+    fn resolve_local(&mut self, name: &Token) -> Option<(usize, bool)> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
-                if local.depth == -1 {
+                if !local.is_initialized() {
                     self.parser
                         .borrow_mut()
                         .error("Can't read local variable in its own initializer.");
                 }
-                return Some(idx);
+                return Some((idx, local.is_const));
             }
         }
         None
+    }
+
+    /// searches for a variable possibly declared in a surrounding function.
+    /// if `name.lexeme` is not found amongst its local variables.
+    /// returns the index where the variable was found and a bool if its immutable.
+    /// By the time the compiler reaches the end of a function declaration,
+    /// every variable reference has been resolved as either a local, an upvalue, or a global
+    fn resolve_upvalue(&mut self, name: &Token) -> Option<(usize, bool)> {
+        // we are currently in the outer most compiler
+        let Some(enclosing) = self.enclosing.as_mut() else {
+            return None;
+        };
+
+        // reucursive call to search all the way back to the outermost compiler.
+        let local: Option<(usize, bool)> = enclosing.resolve_local(name);
+        // index refers to the index of the slot in its the enclosing locals
+        if let Some((index, is_const)) = local {
+            // value_index is the index of the captured up value in its own local array.
+            (*enclosing).locals[index].is_captured = true;
+            let value_index = self.add_upvalue(index, true);
+            return Some((value_index, is_const));
+        }
+
+        if let Some((index, is_const)) = enclosing.resolve_upvalue(name) {
+            // we know its not local because the enclosing couldn't find in its locals.
+            let value_index = self.add_upvalue(index, false);
+            return Some((value_index, is_const));
+        } else {
+            return None;
+        }
+    }
+
+    /// local = true means a value declared in an immediate outerscope is captured.
+    /// false means it captures the UpValue of some captured variable.
+    fn add_upvalue(&mut self, index: usize, local: bool) -> usize {
+        for (idx, upvalue) in self.upvalues.iter().enumerate() {
+            if upvalue.index == index as u32 && upvalue.is_local == local {
+                return idx;
+            }
+        }
+
+        // a function cannot capture more than 255 upvalues.
+        // operand to `OpCode::GetUpValue` and `OpCode::SetUpValue` is u8
+        // an index into this upvalue array.
+        if self.upvalues.len() == FUNCTION_ARG_MAX as usize {
+            self.parser
+                .borrow_mut()
+                .error("Too many closure variables in function.");
+        }
+
+        self.upvalues.push(UpValue {
+            index: index as u32,
+            is_local: local,
+        });
+        self.function.upvalue_count += 1;
+        self.upvalues.len() - 1
     }
 
     fn define_variable(&mut self, global: usize, is_const: bool) {
@@ -430,7 +527,6 @@ impl<'src> Compiler<'src> {
         }
 
         if is_const {
-            // self.emit_opcode_operand(OpCode::ConstGlobal, global);
             self.const_globals.push(global); // compiler knows index at this slot is immutable
         }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);
@@ -655,9 +751,15 @@ impl<'src> Compiler<'src> {
     fn end_scope(&mut self) {
         self.scope_depth -= 1;
 
+        // iterate through locals and emit code if used by any nested
+        // functions.
         while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth
         {
-            self.emit_opcode(OpCode::Pop);
+            if self.locals.last().unwrap().is_captured {
+                self.emit_opcode(OpCode::CloseUpValue);
+            } else {
+                self.emit_opcode(OpCode::Pop);
+            }
             self.locals.pop(); // discard this value.
         }
     }
@@ -828,6 +930,7 @@ impl<'src> Compiler<'src> {
             name: token,
             depth: self.scope_depth,
             is_const: immutable,
+            is_captured: false,
         });
     }
 
@@ -845,9 +948,8 @@ impl<'src> Compiler<'src> {
                 if crate::std::is_native_call(name) {
                     return index;
                 }
-                self.parser
-                    .borrow_mut()
-                    .error_at_current("undeclared variable is being assinged to.");
+                let err_msg = format!("undeclared variable `{}` is being assigned to.", name);
+                self.parser.borrow_mut().error_at_current(&err_msg);
                 index
             }
         }

@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::HashMap;
 use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
@@ -7,7 +8,7 @@ use string_interner::symbol::SymbolU32;
 //------------Virtual-machine
 use crate::compile::compiler::Compiler;
 use crate::core::chunk::Chunk;
-use crate::core::lang::{CallFrame, Function};
+use crate::core::lang::{CallFrame, Closure};
 use crate::core::opcode::OpCode;
 use crate::core::value::{NativeFn, Value};
 use crate::data_structures::interner::{self};
@@ -35,9 +36,12 @@ pub enum InterpretResult {
 pub struct VM {
     stack: Vec<Value>,
     globals: HashTable,
-    call_frames: Vec<CallFrame>, // for gc ..
-                                 // Box::automatically deallocates objects on the heap.
-                                 // objects: LinkedList<Value>
+    call_frames: Vec<CallFrame>,
+    // when a varialbe moves to the heap, all closures capturing that variable
+    // retain a reference  to its one new location. That way when th variable is mutated
+    // all closures see the change.
+    open_upvalues: HashMap<usize, Rc<RefCell<Value>>>,
+    // dummy: *mut * mut Value
 }
 
 impl VM {
@@ -51,6 +55,7 @@ impl VM {
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
+            open_upvalues: HashMap::new(),
         }
     }
 
@@ -70,8 +75,13 @@ impl VM {
                 self.define_native("math::pow".to_owned(), NativeFn(math::pow));
                 self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
 
+                // guard against garbage collection.
                 self.stack.push(Value::LoxFunction(rc.clone()));
-                self.call(rc, 0);
+                self.stack.pop();
+                //---
+                let closure = Rc::new(Closure::new(rc));
+                self.stack.push(Value::LoxClosure(Rc::clone(&closure)));
+                self.call(closure, 0);
                 self.run()
             }
         }
@@ -93,17 +103,27 @@ impl VM {
         self.call_frames.last_mut().unwrap()
     }
 
+    // short lived calls to please the borrow checker.
     fn get_current_frame(&self) -> &CallFrame {
         self.call_frames.last().unwrap()
     }
 
     fn run(&mut self) -> InterpretResult {
-        println!("{:?}", self.stack);
+        #[cfg(debug_assertions)]
+        if DEBUG_TRACE {
+            for s in &self.stack {
+                println!("{}", s);
+            }
+        }
+
         loop {
             #[cfg(debug_assertions)]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
-                Chunk::disassemble_instruction(&self.get_current_frame().function.chunk, start);
+                Chunk::disassemble_instruction(
+                    &self.get_current_frame().closure.function.chunk,
+                    start,
+                );
             }
 
             // short lived borrows because borrow checker complains about
@@ -121,7 +141,6 @@ impl VM {
                         // empty means we have finished exectuing the top level code.
                         if self.call_frames.is_empty() {
                             self.stack.pop(); // pop main script function on the stack.
-                            println!("{}", result);
                             return InterpretResult::Ok;
                         }
                         let offset = self.get_current_frame().slots;
@@ -132,13 +151,11 @@ impl VM {
                     }
                 }
                 OpCode::Constant => {
-                    let constant: Value = self.read_constant(false);
-                    println!("{}", constant);
+                    let constant: Value = self.read_constant();
                     self.stack.push(constant); // self.push_value(constant)
                 }
                 OpCode::Constant24 => {
-                    let constant: Value = self.read_constant(true);
-                    println!("{}", constant);
+                    let constant: Value = self.read_constant();
                     self.stack.push(constant);
                 }
                 OpCode::Negate => {
@@ -191,7 +208,7 @@ impl VM {
                 }
                 OpCode::Print => {
                     let value = self.stack.pop().unwrap();
-                    println!("PRINT = {}", value);
+                    println!("{}", value);
                 }
                 OpCode::Pop => {
                     // used for expression stmts to evaluate an expression and
@@ -203,7 +220,7 @@ impl VM {
                     let n: u8 = self.read_byte();
                     self.stack.truncate(n as usize);
                 }
-                OpCode::DefineGlobal | OpCode::ConstGlobal => {
+                OpCode::DefineGlobal => {
                     // used to strore the global Variable and Value pairs.
                     let name = self.read_string().unwrap();
                     // NOTE: Value is not popped directly off the stack.
@@ -270,13 +287,59 @@ impl VM {
                     self.get_current_frame_mut().ip -= offset as usize;
                 }
                 OpCode::Call => {
-                    let arity = self.read_byte();
+                    let arity = self.read_byte(); // only 256 args allowed, hence read_byte()
                     let function = self.peek(arity as usize);
                     if !self.call_value(function, arity) {
                         return InterpretResult::RuntimeError;
                     }
-                    // we are supposed to  update the old frame
-                    // frame = &vm.frames[vm.frame_count - 1];
+                }
+                OpCode::Closure => {
+                    let value = self.read_constant();
+                    let function = Value::as_function(&value);
+                    let mut closure = Closure::clone(&function);
+
+                    for i in 0..closure.upvalue_count {
+                        // encoding [is_long (0 | 1)][(is_long == 0) ? idx_1b : idx_3b][is_local]
+                        let is_long = self.read_byte();
+                        let index = if is_long == 1 {
+                            let bytes = self.read_3_bytes();
+                            let index = Chunk::inverse_resolve(bytes[0], bytes[1], bytes[2]);
+                            index
+                        } else {
+                            self.read_byte() as usize
+                        };
+
+                        let is_local: bool = self.read_byte() == 1;
+                        let slot_offset = self.get_current_frame().slots;
+                        closure.upvalues[i] = if is_local {
+                            self.capture_upvalue(slot_offset + index)
+                        } else {
+                            self.get_current_frame_mut().closure.upvalues[index].clone()
+                        };
+                    }
+                    self.stack.push(Value::LoxClosure(Rc::new(closure)));
+                }
+                OpCode::GetUpValue => {
+                    // operand is the index into the current function's upvalue array.
+                    let slot = self.read_byte();
+                    let call_frame = self.get_current_frame();
+                    let upvalue = &call_frame.closure.upvalues[slot as usize];
+                    let value = upvalue.location.borrow().clone();
+                    self.stack.push(value);
+                }
+                OpCode::SetUpValue => {
+                    let slot = self.read_byte();
+                    let peek_value = self.peek(0);
+                    let callframe = self.get_current_frame_mut();
+                    *callframe.closure.upvalues[slot as usize]
+                        .location
+                        .borrow_mut() = peek_value;
+                    // assignment is an expression in Lox. so the assigned value remains on the stack.
+                }
+                OpCode::CloseUpValue => {
+                    let slot = self.stack.len() - 1;
+                    self.close_upvalue(slot);
+                    self.stack.pop();
                 }
                 _ => todo!(),
             }
@@ -285,10 +348,10 @@ impl VM {
 
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
-            match &callee {
-                Value::LoxFunction(_) => {
-                    return self.call(Value::as_function(&callee), arity);
-                }
+            return match &callee {
+                // Value::LoxFunction(_) => { represented now as closure.
+                //     self.call(Value::as_function(&callee), arity)
+                // }
                 Value::NativeFunction(func) => {
                     let arg_start = self.stack.len() - arity as usize;
                     let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
@@ -301,12 +364,52 @@ impl VM {
                         }
                         Err(e) => self.runtime_error(&e.to_string()),
                     }
+                    false
                 }
-                _ => return false,
-            }
+                Value::LoxClosure(_) => self.call(Value::as_closure(&callee), arity),
+                _ => false,
+            };
         }
         self.runtime_error("Can only call functions and classes.");
         false
+    }
+
+    /// Reads a local slot, using the shared upvalue cell when the slot has been captured.
+    fn read_local_slot(&self, index: usize) -> Value {
+        if let Some(shared) = self.open_upvalues.get(&index) {
+            shared.borrow().clone()
+        } else {
+            self.stack[index].clone()
+        }
+    }
+
+    /// Writes a local slot and keeps any open upvalue for that slot in sync.
+    fn write_local_slot(&mut self, index: usize, value: Value) {
+        if let Some(shared) = self.open_upvalues.get(&index) {
+            *shared.borrow_mut() = value.clone();
+        }
+        self.stack[index] = value;
+    }
+
+    /// checks if a closure already captured an UpValue and resuses if true.
+    /// else creates a new rumtime representation for it.
+    fn capture_upvalue(&mut self, index: usize) -> RtimeUpValue {
+        if let Some(existing) = self.open_upvalues.get(&index) {
+            return RtimeUpValue {
+                location: Rc::clone(existing),
+            };
+        }
+
+        let shared = Rc::new(RefCell::new(self.stack[index].clone()));
+        self.open_upvalues.insert(index, Rc::clone(&shared));
+        RtimeUpValue { location: shared }
+    }
+
+    /// closes every open upvalue that sits above this index.
+    /// IN Clox, the pointer to the closed value points to locations referent.
+    /// we don't need this since location is already an Rc and maintains a reference to it.
+    fn close_upvalue(&mut self, index: usize) {
+        self.open_upvalues.retain(|&slot, _| slot < index);
     }
 
     // takes name of function and the Funtion ptr
@@ -321,10 +424,12 @@ impl VM {
         self.pop();
     }
 
-    fn call(&mut self, function: Rc<Function>, arity: u8) -> bool {
-        if arity != function.arity {
-            let err_msg: String =
-                format!("Expected {} arguments but got {}", function.arity, arity);
+    fn call(&mut self, clojure: Rc<Closure>, arity: u8) -> bool {
+        if arity != clojure.function.arity {
+            let err_msg: String = format!(
+                "Expected {} arguments but got {}",
+                clojure.function.arity, arity
+            );
             Self::runtime_error(self, &err_msg);
             return false;
         }
@@ -337,7 +442,7 @@ impl VM {
         // ^      | -------args to fn ------
         // slots points here (slot 0 = the function being called)
         self.call_frames.push(CallFrame {
-            function: function.clone(),
+            closure: clojure.clone(), // note rc cloned before passing in, use clojure.
             ip: 0,
             slots: self.stack.len() - arity as usize - 1,
         });
@@ -351,9 +456,9 @@ impl VM {
             // - 1 because ip points to the next instruction to be executed
             // but the failed instruction was the previous one.
             let instruction: usize = frame.ip - 1;
-            let line = frame.function.chunk.lines[instruction];
+            let line = frame.closure.function.chunk.lines[instruction];
             eprint!("[line {}] in ", line.0);
-            match &frame.function.name {
+            match &frame.closure.function.name {
                 Some(name) => eprintln!("{}", name),
                 None => eprintln!("Script"),
             }
@@ -363,7 +468,8 @@ impl VM {
     }
 
     // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
-    fn read_constant(&mut self, is_long: bool) -> Value {
+    fn read_constant(&mut self) -> Value {
+        let is_long = self.call_frames.last().unwrap().read_long();
         let index = if is_long {
             let b1 = self.read_byte() as u32;
             let b2 = self.read_byte() as u32;
@@ -377,6 +483,7 @@ impl VM {
         self.call_frames
             .last()
             .unwrap()
+            .closure
             .function
             .chunk
             .constants
@@ -396,9 +503,23 @@ impl VM {
 
     fn read_byte(&mut self) -> u8 {
         let call_frame = self.call_frames.last_mut().unwrap();
-        let byte_code: &u8 = call_frame.function.chunk.code.get(call_frame.ip).unwrap();
+        let byte_code: &u8 = call_frame
+            .closure
+            .function
+            .chunk
+            .code
+            .get(call_frame.ip)
+            .unwrap();
         call_frame.ip += 1; // point to next byte_code.
         *byte_code
+    }
+
+    fn read_3_bytes(&mut self) -> &[u8] {
+        let call_frame = self.call_frames.last_mut().unwrap();
+        let bytes: &[u8] =
+            &call_frame.closure.function.chunk.code[call_frame.ip..call_frame.ip + 3];
+        call_frame.ip += 3; // point to next byte_code.
+        bytes
     }
 
     fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Option<Value> {
@@ -417,11 +538,44 @@ impl VM {
         // Because we have 2 constant-indexing Operands OpConstant and OpConstant24
         // We need to resolve what operand was used to store this constant.
         // so we know to read either the next byte or next 3 bytes.
-        let call_frame = self.call_frames.last().unwrap();
-        let is_long = call_frame.ip >= call_frame.function.chunk.index_const24;
-        match self.read_constant(is_long) {
+        match self.read_constant() {
             Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
+        }
+    }
+}
+
+// runtime representation of UpValues
+use std::cell::RefCell;
+/// Multiple closures can close over the same variable, so we never
+/// own the variable it references.
+#[derive(Debug, Default, PartialEq, PartialOrd, Clone)]
+pub struct RtimeUpValue {
+    // FIXME: this feels like over kill.
+    pub location: Rc<RefCell<Value>>,
+}
+
+/// Open UpValue refer to an upvalue that points to a local variable still on the stack.
+/// Closed refers to a variable moved to the Heap.
+enum UpValueState {
+    Open(usize), // index into the vm's stack.
+    Closed(Value),
+}
+
+pub struct ObjUpValue {
+    state: Rc<RefCell<UpValueState>>,
+}
+
+impl RtimeUpValue {
+    pub fn new(value: Value) -> Self {
+        Self {
+            location: Rc::new(RefCell::new(value)),
+        }
+    }
+
+    pub fn clone(value: Rc<RefCell<Value>>) -> Self {
+        Self {
+            location: Rc::clone(&value),
         }
     }
 }

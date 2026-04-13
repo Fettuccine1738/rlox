@@ -1,5 +1,5 @@
 * CHALLENGES
-- implement OP_CONSTANT_LONG: because the operand to OP_CONSTANT is a single byte
+- (DONE) implement OP_CONSTANT_LONG: because the operand to OP_CONSTANT is a single byte
 (256) maximum constants are allowed, which may be too small. Howeverm to allow for
 more constants, we create OP_CONSTANT_LONG whose operand is a 24 bit number.  (DONE)
 
@@ -7,13 +7,13 @@ more constants, we create OP_CONSTANT_LONG whose operand is a 24 bit number.  (D
 to save space storing line number of byte_code and their operands.
 Line-information(https://craftinginterpreters.com/chunks-of-bytecode.html).
 
-- support string interpolation.
+- TODO(ALMOST):: resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 
+current heuristic is error-prone but works.
 
-- todo rename ambigous match_char in scanner to next_match_char
-
-- resolve finding if a constant variable is stored with OpConstant or OP_CONSTANT_LONG 
-
-- add final / const key word to support immutability. [done]
+- (DONE) add final / const key word to support immutability.
 
 - add support for `continue`
+
 - add support for `switch` statements.
+
+- (DONE): Fix emit bytes for captured upvalues (sitting in slots > 255)

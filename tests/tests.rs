@@ -43,7 +43,7 @@ pub mod test {
     }
 
     #[test]
-    fn tests_runtime_error() {
+    fn tests_invalid_expr_is_runtime_error() {
         let source = "1 + nil;";
         assert_eq!(
             VM::new().interpret(source.to_owned()),
@@ -79,7 +79,7 @@ pub mod test {
     }
 
     #[test]
-    fn tests_global_declaration() {
+    fn tests_global_declaration_ok() {
         let _src = "var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
@@ -91,8 +91,8 @@ pub mod test {
     /// at compile time when reassigned to.
     #[test]
     fn test_constglobal_declaration_notok() {
-        let _src2 = "const b = \"cow\"; \n\
-                               b = \"co\";";
+        let _src2 = "const boo = \"cow\"; \n\
+                               boo = \"co\";";
         assert_eq!(
             VM::new().interpret(_src2.to_owned()),
             InterpretResult::CompileError
@@ -101,7 +101,7 @@ pub mod test {
 
     /// tests access const global variable compiles successfully.
     #[test]
-    fn test_constglobal_access_ok() {
+    fn test_const_variable_access_ok() {
         let _src2 = "const foo = \"hello\"; \n\
                            var bar = \"\"; \n\
                            bar = foo + \" world.\n\"; \n\
@@ -111,7 +111,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_local_scopes_ok() {
+    fn test_block_scope_ok() {
         let _src = "{ var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
@@ -128,15 +128,14 @@ pub mod test {
                 } \n\
                 var start = time::clock();
                 areWeHavingItYet();
-                var end = time::clock();
-                print end - start;
+                print time::clock() - start;
                 ";
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
 
     /// native functions that take arguments.
     #[test]
-    fn test_args_function_call_ok() {
+    fn test_nativefunc_with_args_ok() {
         let source = "
                 var s1 = \"aoo\";
                 var s2 = \"aoo\";
@@ -166,17 +165,25 @@ pub mod test {
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
 
+    /// tests global variable can be reassigned to from closure.
+    /// tests closure can capture variables declared in outer and global scopes. 
     #[test]
     fn tests_nested_functions() {
-        let src = "var x = \"sglobal\";
+        let src = "var x = \"in global\";
+                         var y = \"foo\";
+                         print y;
+
                         fun outer() {
-                        var x = \"souter\";
+                        var x = \"in outer\";
                         fun inner() {
+                            y = \"bar\";
                             print x;
                         }
                         inner();
                     }
-                outer();";
+                    outer();
+                    print y;
+                    ";
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }

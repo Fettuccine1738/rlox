@@ -8,7 +8,7 @@ use std::{
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    core::lang::Function,
+    core::lang::{Closure, Function},
     data_structures::interner::{self},
     std::VmResult,
 };
@@ -16,9 +16,10 @@ use crate::{
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
 /// covers kind of values that has built-in-support in the VM.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Default)]
 pub enum Value {
     Boolean(bool),
+    #[default]
     Nil,
     Number(f64),
     LoxFunction(Rc<crate::core::lang::Function>),
@@ -26,6 +27,7 @@ pub enum Value {
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
     NativeFunction(NativeFn),
+    LoxClosure(Rc<Closure>),
 }
 
 impl Value {
@@ -52,6 +54,10 @@ impl Value {
         matches!(value, Value::Nil)
     }
 
+    pub fn is_closure(value: &Value) -> bool {
+        matches!(value, Value::LoxClosure(_))
+    }
+
     pub fn is_number(value: &Value) -> bool {
         matches!(value, Value::Number(_))
     }
@@ -61,7 +67,9 @@ impl Value {
     }
 
     pub fn is_object(value: &Value) -> bool {
-        matches!(value, Value::LoxFunction(_)) || matches!(value, Value::NativeFunction(_))
+        matches!(value, Value::LoxClosure(_))
+            || matches!(value, Value::LoxFunction(_))
+            || matches!(value, Value::NativeFunction(_))
     }
 
     pub fn is_string(&self) -> bool {
@@ -89,6 +97,15 @@ impl Value {
             *n
         } else {
             panic!("Expected Variant boolean but got {:?}", value);
+        }
+    }
+
+    // TODO: deduplicate and merge with as_function()
+    pub fn as_closure(value: &Value) -> Rc<Closure> {
+        if let Value::LoxClosure(clj) = value {
+            return clj.clone();
+        } else {
+            panic!("Expected Variant closure but got {:?}", value);
         }
     }
 
@@ -124,13 +141,20 @@ impl Display for Value {
         match &self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
-            Value::Nil => write!(f, "NIL"),
+            Value::Nil => write!(f, "nil"),
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
-                write!(f, ":{}", s)
+                write!(f, "{}", s)
             }
             Value::NativeFunction(n) => write!(f, "{}", n),
-            Value::LoxFunction(n) => write!(f, "{}", n),
+            Value::LoxFunction(n) => match &n.name {
+                Some(name) => write!(f, "<fn {}>", name),
+                None => write!(f, "<script>"),
+            },
+            Value::LoxClosure(c) => match &c.function.name {
+                Some(name) => write!(f, "<fn {}>", name),
+                None => write!(f, "<script>"),
+            },
             _ => todo!(),
         }
     }
