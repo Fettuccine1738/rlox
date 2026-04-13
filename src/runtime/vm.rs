@@ -141,7 +141,6 @@ impl VM {
                         // empty means we have finished exectuing the top level code.
                         if self.call_frames.is_empty() {
                             self.stack.pop(); // pop main script function on the stack.
-                            println!("{}", result);
                             return InterpretResult::Ok;
                         }
                         let offset = self.get_current_frame().slots;
@@ -153,12 +152,10 @@ impl VM {
                 }
                 OpCode::Constant => {
                     let constant: Value = self.read_constant();
-                    println!("{}", constant);
                     self.stack.push(constant); // self.push_value(constant)
                 }
                 OpCode::Constant24 => {
                     let constant: Value = self.read_constant();
-                    println!("{}", constant);
                     self.stack.push(constant);
                 }
                 OpCode::Negate => {
@@ -211,7 +208,7 @@ impl VM {
                 }
                 OpCode::Print => {
                     let value = self.stack.pop().unwrap();
-                    println!("PRINT = {}", value);
+                    println!("{}", value);
                 }
                 OpCode::Pop => {
                     // used for expression stmts to evaluate an expression and
