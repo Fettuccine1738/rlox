@@ -375,20 +375,33 @@ impl VM {
         false
     }
 
+    /// Reads a local slot, using the shared upvalue cell when the slot has been captured.
+    fn read_local_slot(&self, index: usize) -> Value {
+        if let Some(shared) = self.open_upvalues.get(&index) {
+            shared.borrow().clone()
+        } else {
+            self.stack[index].clone()
+        }
+    }
+
+    /// Writes a local slot and keeps any open upvalue for that slot in sync.
+    fn write_local_slot(&mut self, index: usize, value: Value) {
+        if let Some(shared) = self.open_upvalues.get(&index) {
+            *shared.borrow_mut() = value.clone();
+        }
+        self.stack[index] = value;
+    }
+
     /// checks if a closure already captured an UpValue and resuses if true.
     /// else creates a new rumtime representation for it.
     fn capture_upvalue(&mut self, index: usize) -> RtimeUpValue {
         if let Some(existing) = self.open_upvalues.get(&index) {
-            RtimeUpValue {
+            return RtimeUpValue {
                 location: Rc::clone(existing),
             };
         }
 
-        let value = self.stack[index].clone();
-        let shared = Rc::new(RefCell::new(value));
-        // let created_upvalue = RtimeUpValue {
-        //     location: Rc::new(RefCell::new(unsafe {(*local).clone()}))
-        // };
+        let shared = Rc::new(RefCell::new(self.stack[index].clone()));
         self.open_upvalues.insert(index, Rc::clone(&shared));
         RtimeUpValue { location: shared }
     }
