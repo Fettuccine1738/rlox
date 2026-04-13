@@ -105,7 +105,7 @@ impl Value {
         if let Value::LoxClosure(clj) = value {
             return clj.clone();
         } else {
-            panic!("Expected Variant boolean but got {:?}", value);
+            panic!("Expected Variant closure but got {:?}", value);
         }
     }
 
