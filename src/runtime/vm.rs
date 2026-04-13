@@ -109,8 +109,11 @@ impl VM {
     }
 
     fn run(&mut self) -> InterpretResult {
-        for s in &self.stack {
-            println!("{}", s);
+        #[cfg(debug_assertions)]
+        if DEBUG_TRACE {
+            for s in &self.stack {
+                println!("{}", s);
+            }
         }
 
         loop {
