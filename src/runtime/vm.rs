@@ -337,7 +337,9 @@ impl VM {
                     // assignment is an expression in Lox. so the assigned value remains on the stack.
                 }
                 OpCode::CloseUpValue => {
-                    self.close_upvalue(self.stack.len() - 1);
+                    let slot = self.stack.len() - 1;
+                    self.close_upvalue(slot);
+                    self.stack.pop();
                 }
                 _ => todo!(),
             }
