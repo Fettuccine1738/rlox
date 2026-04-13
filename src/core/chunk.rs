@@ -190,10 +190,12 @@ impl Chunk {
     fn byte_instruction(&self, name: &str, offset: usize, in_const_pool: bool) -> usize {
         // the operand to this opcode is not always in the constants pool, it may be an index
         // in the upvalues or locals list of another function
-        print!("{}s \t", name);
+        let slot = self.code[offset + 1];
+        print!("{name} \t");
         if in_const_pool {
-            let slot = self.code[offset + 1];
             println!("{:04}", slot);
+        } else {
+            println!("{}", slot);
         }
         offset + 2
     }
