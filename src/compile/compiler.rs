@@ -560,8 +560,7 @@ impl<'src> Compiler<'src> {
                 | Kind::If
                 | Kind::While
                 | Kind::Print
-                | Kind::Return
-                | Kind::Identifier => return,
+                | Kind::Return => return,
                 _ => (),
             }
             self.parser.borrow_mut().advance();
