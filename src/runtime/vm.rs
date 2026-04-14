@@ -180,15 +180,9 @@ impl VM {
                         None => return InterpretResult::RuntimeError,
                     }
                 }
-                OpCode::NIL => {
-                    self.stack.push(Value::Nil);
-                }
-                OpCode::True => {
-                    self.stack.push(Value::Boolean(true));
-                }
-                OpCode::False => {
-                    self.stack.push(Value::Boolean(false));
-                }
+                OpCode::NIL => self.stack.push(Value::Nil),
+                OpCode::True => self.stack.push(Value::Boolean(true)),
+                OpCode::False => self.stack.push(Value::Boolean(false)),
                 OpCode::Not => {
                     let value: bool = if let Some(v) = self.stack.pop() {
                         v.is_falsey()
@@ -210,9 +204,9 @@ impl VM {
                     let value = self.stack.pop().unwrap();
                     println!("{}", value);
                 }
+                // used for expression stmts to evaluate an expression and
+                // discard the result.
                 OpCode::Pop => {
-                    // used for expression stmts to evaluate an expression and
-                    // discard the result.
                     let _ = self.stack.pop();
                 }
                 OpCode::PopN => {
