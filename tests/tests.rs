@@ -166,7 +166,7 @@ pub mod test {
     }
 
     /// tests global variable can be reassigned to from closure.
-    /// tests closure can capture variables declared in outer and global scopes. 
+    /// tests closure can capture variables declared in outer and global scopes.
     #[test]
     fn tests_nested_functions() {
         let src = "var x = \"in global\";

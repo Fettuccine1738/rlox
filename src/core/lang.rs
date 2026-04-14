@@ -134,6 +134,8 @@ impl Display for Closure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "function: {} \n UPVALUES: {:?}\n", self.function, self.upvalues)
+            "function: {} \n UPVALUES: {:?}\n",
+            self.function, self.upvalues
+        )
     }
 }

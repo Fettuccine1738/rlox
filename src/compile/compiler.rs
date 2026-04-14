@@ -347,7 +347,6 @@ impl<'src> Compiler<'src> {
         // operand to this opcode, is the constant functions index in the constants table.
         self.emit_opcode_operand(OpCode::Closure, index);
 
-
         // variable encoding of the byte is now
         // [0 | 1 (is this index > 255)][idx_1b | idx_3b][is_local]
         for (is_local, index) in bytes_to_emit {
