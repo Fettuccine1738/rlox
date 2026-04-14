@@ -137,17 +137,18 @@ impl HashTable {
         let entry = Some(Entry { key: key, value: v });
         if self.entries.is_empty() {
             self.entries.push(entry);
+            self.len += 1;
             return true;
         }
 
         match self.get_key_index(key) {
             ProbeResult::Empty(index) => {
                 self.entries[index] = entry;
+                self.len += 1;
                 true
             }
             ProbeResult::Found(index) => {
                 self.entries[index] = entry;
-                self.len += 1;
                 false
             }
             ProbeResult::Full => {

@@ -165,8 +165,27 @@ pub mod test {
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
 
-    /// tests global variable can be reassigned to from closure.
-    /// tests closure can capture variables declared in outer and global scopes.
+    /// tests closure correctly recognizes mutation of captured values. 
+    #[test]
+    fn tests_closures_see_mutations() {
+        let src = "var x = \"in global\";
+
+                        fun outer() {
+                            fun inner() {
+                                print x;
+                            }
+                            inner();
+                        }
+                        outer();
+                        x= \"global changed.\";
+                        outer();
+                    ";
+
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    }
+
+
     #[test]
     fn tests_nested_functions() {
         let src = "var x = \"in global\";
