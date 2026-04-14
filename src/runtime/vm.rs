@@ -1,3 +1,4 @@
+#![allow(unused)]
 use core::panic;
 use std::collections::HashMap;
 use std::ops::{Add, Div, Mul, Sub};
@@ -17,14 +18,10 @@ use crate::std::math;
 use crate::std::time;
 use crate::std::{io, strings};
 
-// use crate::lox_errors::VmError;
-// use crate::value::HeapAllocatedObj;
-
 pub const DEBUG_TRACE: bool = true;
 pub const FRAMES_MAX: usize = 64;
 pub const STACK_MAX: usize = 256; // update to FRAMES_MAX * UINT8_COUNT
 
-// PartialEq is derived, to allow assertions on the variants.
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
 pub enum InterpretResult {
@@ -256,15 +253,15 @@ impl VM {
                     // reads the current frame slots array
                     // which meant it accessed the given numbered slot relative to the beginning of that frame.
                     let offset = self.read_byte();
-                    // verify correctness
                     let base: usize = self.get_current_frame_mut().slots;
-                    let value = self.stack[base + (offset as usize)].clone();
+                    let value = self.read_local_slot(base + (offset as usize));
                     self.push_value(value);
                 }
                 OpCode::SetLocal => {
                     let slot = self.read_byte();
                     let base: usize = self.get_current_frame_mut().slots;
-                    self.stack[base + slot as usize] = self.peek(0);
+                    let value: Value = self.peek(0);
+                    self.write_local_slot(base + slot as usize, value);
                 }
                 OpCode::JumpIfFalse => {
                     let offset = self.read_short();
@@ -343,15 +340,11 @@ impl VM {
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
             return match &callee {
-                // Value::LoxFunction(_) => { represented now as closure.
-                //     self.call(Value::as_function(&callee), arity)
-                // }
                 Value::NativeFunction(func) => {
                     let arg_start = self.stack.len() - arity as usize;
                     let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
                     match (func.0)(arity as usize, args) {
                         Ok(result) => {
-                            // let trunc = self.stack.len() - (arg_start + 1);
                             self.stack.truncate(arg_start - 1); // remove function and its arguments.
                             self.push_value(result);
                             return true;

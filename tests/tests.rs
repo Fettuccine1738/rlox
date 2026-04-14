@@ -167,7 +167,7 @@ pub mod test {
 
     /// tests closure correctly recognizes mutation of captured values. 
     #[test]
-    fn tests_closures_see_mutations() {
+    fn tests_closures_see_global_mutations() {
         let src = "var x = \"in global\";
 
                         fun outer() {
@@ -184,6 +184,29 @@ pub mod test {
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }
+
+
+    /// tests that connection between local value and captured values are not severed.
+    /// verifies that a closures see a change to a local value.
+    #[test]
+    fn tests_closures_see_local_mutations() {
+        let src = "
+                        fun outer() {
+                            var local = \"buzz\";
+                            fun inner() {
+                                print local;
+                            }
+                            local = \"fizz\";
+                            inner();
+                        }
+
+                        outer();
+                    ";
+
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    }
+
 
 
     #[test]

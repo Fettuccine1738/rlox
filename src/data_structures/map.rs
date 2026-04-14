@@ -3,18 +3,6 @@ use string_interner::{Symbol, symbol::SymbolU32};
 use crate::core::value::Value;
 use std::fmt::Debug;
 
-// #[derive(Debug)]
-// pub struct HashTable<K: Eq + Debug + Clone, V: Debug + Clone> {
-//     // count: usize, // redundant, Vec already holds this info.
-//     // capacity: usize,
-//     entries: Vec<Option<Entry<K, V>>>,
-// }
-// #[derive(Debug)]
-// struct Entry<K: Debug + Clone, V: Debug + Clone> {
-//     key: K,
-//     value: V
-//  }
-
 /// K: SymbolU32 is the interned string id, the Value::String(SymbolU32)
 /// already carries required information, no need duplicating the interened String again.
 #[derive(Debug)]
@@ -99,17 +87,6 @@ impl HashTable {
         }
     }
 
-    // fn find_entry_mut(&mut self, key: SymbolU32) -> Option<&mut Option<Entry<SymbolU32, Value>>> {
-    //     // match self.get_key_index(key) {
-    //     //     ProbeResult::Found(index) => Some(&mut self.entries[index]),
-    //     //     _ => None,
-    //     // }
-    //     todo!("Not implemented yet.")
-    // }
-
-    // fn find_entry(&self, key: SymbolU32) -> &Option<Entry<SymbolU32, Value>> {
-    //     todo!("Not implemented yet.")
-    // }
 
     // checks if key exists.
     fn get_key_index(&self, key: SymbolU32) -> ProbeResult {

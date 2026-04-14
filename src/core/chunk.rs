@@ -118,7 +118,7 @@ impl Chunk {
             OpCode::DefineGlobal => chunk.constant_instruction("OP_DEFINE_GLOBAL", offset),
             OpCode::GetGlobal => chunk.constant_instruction("OP_GET_GLOBAL", offset),
             OpCode::SetGlobal => chunk.constant_instruction("OP_SET_GLOBAL", offset),
-            OpCode::PopN => chunk.constant_instruction("OP_SET_GLOBAL", offset),
+            OpCode::PopN => chunk.constant_instruction("OP_POP_N", offset),
             OpCode::GetLocal => {
                 let slot = chunk.code[offset + 1];
                 // -1 because operand to this opcode is the index in its local stack
@@ -173,8 +173,8 @@ impl Chunk {
                 }
                 off_t
             }
-            OpCode::GetUpValue => chunk.byte_instruction("OP_GET_VALUE", offset, true), // operand is code pool
-            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_VALUE", offset, true), // also here
+            OpCode::GetUpValue => chunk.byte_instruction("OP_GET_UPVALUE", offset, false), // operand is code pool
+            OpCode::SetUpValue => chunk.byte_instruction("OP_SET_UPVALUE", offset, false), // also here
             OpCode::CloseUpValue => Self::simple_instruction("OP_CLOSE_VALUE", offset),
         }
     }
@@ -193,7 +193,7 @@ impl Chunk {
         let slot = self.code[offset + 1];
         print!("{name} \t");
         if in_const_pool {
-            println!("{:04}", slot);
+            println!("{:04}", self.constants[slot as usize]);
         } else {
             println!("{}", slot);
         }
