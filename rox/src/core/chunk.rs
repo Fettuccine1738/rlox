@@ -139,7 +139,7 @@ impl Chunk {
                     let index = Self::inverse_resolve(bytes[0], bytes[1], bytes[2]);
                     (offset + 4, index)
                 };
-                println!("OP_CLOSURE {:04}", constant);
+                print!("OP_CLOSURE {:04}", constant);
                 let function = Value::as_function(&chunk.constants[constant as usize]);
                 for _ in 0..function.upvalue_count {
                     // encoding [is_long][idx_1b or idx_3b][is_local]

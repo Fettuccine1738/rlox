@@ -1,8 +1,7 @@
 use crate::core::chunk::Chunk;
-use crate::runtime::vm::RtimeUpValue;
+use crate::core::value::ObjId;
+use crate::runtime::heap::{GcValue, Heap};
 use std::fmt::Display;
-use std::rc::Rc;
-use std::vec;
 
 /// NOTE: move to object.rs once complexity increases.
 #[derive(Debug, Clone)]
@@ -31,18 +30,16 @@ impl PartialOrd for Function {
             Some(core::cmp::Ordering::Equal) => {}
             ord => return ord,
         }
-        // match self.chunk.partial_cmp(&other.chunk) {
-        //     Some(core::cmp::Ordering::Equal) => {}
-        //     ord => return ord,
-        // }
         self.name.partial_cmp(&other.name)
     }
 }
+
 /// A CallFrame represents a single ongoing function call. The slots field
 /// points into the VM's value stack at the first slot that this function
 /// can use.
+#[derive(Debug, Clone, Copy)]
 pub struct CallFrame {
-    pub closure: Rc<Closure>,
+    pub closure_id: ObjId, // object id as pointer into the Heap datastructure
     pub ip: usize,
     pub slots: usize, // offset
 }
@@ -50,8 +47,11 @@ pub struct CallFrame {
 impl CallFrame {
     /// this is required to know if the operand to an opcode is the
     /// next byte or the next three bytes (lots of constants in chunks.)
-    pub fn read_long(&self) -> bool {
-        self.ip >= self.closure.function.chunk.index_const24
+    pub fn is_long(&self, heap: &Heap) -> bool {
+        match heap.get(self.closure_id).value {
+            GcValue::Closure(ref closure) => self.ip >= closure.function.chunk.index_const24,
+            _ => panic!("Expected to find a closure"),
+        }
     }
 }
 
@@ -94,48 +94,39 @@ pub enum FunctionType {
     Script,
 }
 
-/// Different closures may have different number of upvalues.
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct Closure {
-    pub function: Rc<Function>,
-    pub upvalues: Vec<RtimeUpValue>,
-    /// this is stored incase GC cleans up function.
-    pub upvalue_count: usize,
-}
+// /// Different closures may have different number of upvalues.
+// #[derive(Debug, PartialEq, PartialOrd, Clone)]
+// pub struct Closure {
+//     pub function: Rc<Function>,
+//     pub upvalues: Vec<super::value::ObjId>, // each ObjId points to a shared GcValue::UpValue
+//     /// this is stored incase GC cleans up function.
+//     pub upvalue_count: usize,
+// }
 
-impl Closure {
-    pub fn new(func: Rc<Function>) -> Self {
-        let count = func.upvalue_count;
-        // per Bob; careful dance to please the garbage collector.
-        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
-            .take(count)
-            .collect::<Vec<RtimeUpValue>>();
+// impl Closure {
+//     pub fn new(func: Rc<Function>) -> Self {
+//         let count = func.upvalue_count;
+//         // per Bob; careful dance to please the garbage collector.
+//         // let upvalues_init = std::iter::from_fn(|| Some(ObjUpValue::default()))
+//         //     .take(count)
+//         //     .collect::<Vec<ObjUpValue>>();
 
-        Self {
-            function: func,
-            upvalues: upvalues_init,
-            upvalue_count: count,
-        }
-    }
+//         Self {
+//             function: func,
+//             upvalues: Vec::with_capacity(count),
+//             upvalue_count: count,
+//         }
+//     }
 
-    pub fn clone(func: &Rc<Function>) -> Self {
-        let upvalues_init = std::iter::from_fn(|| Some(RtimeUpValue::default()))
-            .take(func.upvalue_count)
-            .collect::<Vec<RtimeUpValue>>();
-        Self {
-            function: func.clone(),
-            upvalues: upvalues_init,
-            upvalue_count: func.upvalue_count,
-        }
-    }
-}
-
-impl Display for Closure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "function: {} \n UPVALUES: {:?}\n",
-            self.function, self.upvalues
-        )
-    }
-}
+//     pub fn clone(func: &Rc<Function>) -> Self {
+//         // let upvalues_init = std::iter::from_fn(|| Some(ObjUpValue::default()))
+//         //     .take(func.upvalue_count)
+//         //     .collect::<Vec<ObjUpValue>>();
+//         let count = func.upvalue_count;
+//         Self {
+//             function: func.clone(),
+//             upvalues: Vec::with_capacity(count),
+//             upvalue_count: func.upvalue_count,
+//         }
+//     }
+// }

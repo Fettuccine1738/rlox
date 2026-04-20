@@ -36,20 +36,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rlox"
+version = "0.1.0"
+dependencies = [
+ "rlox_gc_derive",
+ "string-interner",
+]
+
+[[package]]
 name = "rlox_gc_derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "rox"
-version = "0.1.0"
-dependencies = [
- "rlox_gc_derive",
- "string-interner",
 ]
 
 [[package]]

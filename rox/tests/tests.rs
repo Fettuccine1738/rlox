@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod test {
-    use rlox::{
+    use rox::{
         compile::compiler::Compiler,
         runtime::vm::{InterpretResult, VM},
     };
@@ -165,7 +165,7 @@ pub mod test {
         assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
     }
 
-    /// tests closure correctly recognizes mutation of captured values. 
+    /// tests closure correctly recognizes mutation of captured values.
     #[test]
     fn tests_closures_see_global_mutations() {
         let src = "var x = \"in global\";
@@ -184,7 +184,6 @@ pub mod test {
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }
-
 
     /// tests that connection between local value and captured values are not severed.
     /// verifies that a closures see a change to a local value.
@@ -207,8 +206,6 @@ pub mod test {
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }
 
-
-
     #[test]
     fn tests_nested_functions() {
         let src = "var x = \"in global\";
@@ -225,6 +222,25 @@ pub mod test {
                     }
                     outer();
                     print y;
+                    ";
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    }
+
+    // all objects here is reachable from the roots and should not
+    // be collected.
+    #[test]
+    fn tests_gc_reaches_all() {
+        let src = "
+                        fun makeClosure() {
+                        var x = \"data\";
+                        fun f() {
+                            print x;
+                        }
+                            return f;
+                        }
+                        var closure = makeClosure();
+                        closure();
                     ";
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);

@@ -7,10 +7,13 @@ use super::token::Kind;
 use crate::compile::token::Token;
 use crate::core::chunk::Chunk;
 use crate::core::opcode::OpCode;
-use crate::core::{lang::Function, lang::FunctionType, value::Value};
+use crate::core::value::Value;
 use crate::data_structures::interner::{self};
+use crate::runtime::{lang::Function, lang::FunctionType};
 
 pub const FUNCTION_ARG_MAX: u8 = 255;
+pub const LONG_UPVALUE_INDEX: u8 = 1; // index of a captured value sitting on slot > 255
+pub const SHORT_UPVALUE_INDEX: u8 = 0; // vice versa
 // dummy Parse Rule, required in cases where an error occured,
 // causing an unexpected TokenKind to be used to indexe the ParseRule table.
 // Compiler in some cases doesn't stop.
@@ -23,7 +26,7 @@ pub struct Local<'src> {
     // Sentinel -1 means this local is uninitialized.
     depth: i32,
     is_const: bool,
-    // true if this local is captured by any later nested function declaratoin.
+    // true if this local is captured by any later nested function declaration.
     is_captured: bool,
 }
 
@@ -307,6 +310,7 @@ impl<'src> Compiler<'src> {
             is_captured: false,
         });
 
+        // consume parameters
         if !inner.check(Kind::RightParen) {
             loop {
                 inner.function.arity += 1;
@@ -329,8 +333,9 @@ impl<'src> Compiler<'src> {
         inner.begin_scope();
         inner.consume(Kind::LeftBrace, "Expect '{' before function body.");
         inner.block();
+        // inner.end_scope(); unclear why we do not need to end scope
 
-        // the enclosing bytes holds this closure and emits the bytes and operands
+        // Enclosing compiler holds this closure and emits the bytes and operands
         // to the closure in its own chunk.
         let bytes_to_emit: Vec<(u8, u32)> = inner
             .upvalues
@@ -340,7 +345,7 @@ impl<'src> Compiler<'src> {
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
 
-        // value is stored as function but used a closure.
+        // value is stored as function but used as closure.
         let index: usize = self
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
@@ -353,14 +358,14 @@ impl<'src> Compiler<'src> {
             if index > 255 {
                 // is_long flag (used in cases where the captured variable) means
                 // is the (255+th) variable in the captured local or upvalue.
-                self.emit_byte(1);
+                self.emit_byte(LONG_UPVALUE_INDEX);
                 // emit 3 bytes
                 let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(index as usize);
                 self.emit_byte(bits0_7);
                 self.emit_byte(bits8_15);
                 self.emit_byte(bits16);
             } else {
-                self.emit_byte(0); // !is_long index into upvalues or locals.
+                self.emit_byte(SHORT_UPVALUE_INDEX); // !is_long index into upvalues or locals.
                 self.emit_byte(index as u8);
             }
             self.emit_byte(is_local);

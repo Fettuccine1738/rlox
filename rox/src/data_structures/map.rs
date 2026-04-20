@@ -11,13 +11,23 @@ pub struct HashTable {
     /// Some = occupied,
     /// None = empty slot, terminate probing.
     pub entries: Vec<Option<Entry<SymbolU32, Value>>>,
-    len: u32,
+    pub len: u32,
 }
 
 #[derive(Debug)]
 pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
     key: K,
     value: V,
+}
+
+impl<K: Debug + Clone, V: Debug + Clone> Entry<K, V> {
+    pub fn get_key(&self) -> &K {
+        &self.key
+    }
+
+    pub fn get_value(&self) -> &V {
+        &self.value
+    }
 }
 
 #[derive(Debug)]
@@ -55,6 +65,7 @@ impl<'a> Iterator for Iter<'a> {
         self.iter.next()
     }
 }
+
 pub struct IterMut<'a> {
     iter: std::iter::Flatten<std::slice::IterMut<'a, Option<Entry<SymbolU32, Value>>>>,
 }
@@ -75,7 +86,7 @@ impl HashTable {
         }
     }
 
-    pub fn iter(&mut self) -> Iter<'_> {
+    pub fn iter(&self) -> Iter<'_> {
         Iter {
             iter: self.entries.iter().flatten(),
         }
@@ -86,7 +97,6 @@ impl HashTable {
             iter: self.entries.iter_mut().flatten(),
         }
     }
-
 
     // checks if key exists.
     fn get_key_index(&self, key: SymbolU32) -> ProbeResult {

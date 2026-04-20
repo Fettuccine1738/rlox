@@ -17,3 +17,6 @@ current heuristic is error-prone but works.
 - add support for `switch` statements.
 
 - (DONE): Fix emit bytes for captured upvalues (sitting in slots > 255)
+
+- (TODO): Fix test/test_unnamed_variable_fails_compile. This tests should return a Compile error 
+in cases (foo = 8; // foo is never declared with keyword `var`) but instead it panics.
