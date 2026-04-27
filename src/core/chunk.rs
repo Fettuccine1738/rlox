@@ -123,14 +123,23 @@ impl Chunk {
                 let slot = chunk.code[offset + 1];
                 // -1 because operand to this opcode is the index in its local stack
                 // which is offset by 1 because there is always a dummy local.
-                println!("OP_GET_LOCAL {:04}", chunk.constants[(slot - 1) as usize]);
+                println!("OP_GET_LOCAL {:04}", slot);
                 offset + 2
             }
             OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset, false),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
-            OpCode::Call => chunk.byte_instruction("OP_CALL", offset, true),
+            OpCode::Call => {
+                let (arity, new_offset) = if offset > 255  {
+                    let bytes = &chunk.code[offset..offset+3];
+                    (Self::inverse_resolve(bytes[0], bytes[1], bytes[2]), offset + 4)
+                } else {
+                    (chunk.code[offset + 1] as usize, offset + 2)
+                };
+                println!("OP_CALL with {} arguments", arity);
+                new_offset
+            }
             OpCode::Closure => {
                 let (mut off_t, constant) = if offset < chunk.index_const24 {
                     (offset + 2, chunk.code[offset + 1] as usize)
