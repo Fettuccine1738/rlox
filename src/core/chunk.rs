@@ -130,16 +130,8 @@ impl Chunk {
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
-            OpCode::Call => {
-                let (arity, new_offset) = if offset > 255  {
-                    let bytes = &chunk.code[offset..offset+3];
-                    (Self::inverse_resolve(bytes[0], bytes[1], bytes[2]), offset + 4)
-                } else {
-                    (chunk.code[offset + 1] as usize, offset + 2)
-                };
-                println!("OP_CALL with {} arguments", arity);
-                new_offset
-            }
+            // arity is a byte instruction, because arguments are limited to =255
+            OpCode::Call => chunk.byte_instruction("OP_CALL: arity = ", offset, false),
             OpCode::Closure => {
                 let (mut off_t, constant) = if offset < chunk.index_const24 {
                     (offset + 2, chunk.code[offset + 1] as usize)
