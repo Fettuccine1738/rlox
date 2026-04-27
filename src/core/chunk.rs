@@ -126,7 +126,7 @@ impl Chunk {
                 println!("OP_GET_LOCAL {:04}", chunk.constants[(slot - 1) as usize]);
                 offset + 2
             }
-            OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset, true),
+            OpCode::SetLocal => chunk.byte_instruction("OP_SET_LOCAL", offset, false),
             OpCode::JumpIfFalse => chunk.jump_instruction("OP_JUMP_IF_FALSE", 1, offset),
             OpCode::Jump => chunk.jump_instruction("OP_JUMP", 1, offset),
             OpCode::Loop => chunk.jump_instruction("OP_LOOP", -1, offset),
