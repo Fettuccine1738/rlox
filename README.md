@@ -167,7 +167,11 @@ static RULES: [ParseRule; 40] = {
 src/
 ├── main.rs                    — entry point / REPL stub
 ├── lib.rs                     — crate root, module declarations
-├── vm.rs                      — VM, interpreter loop, InterpretResult
+├── runtime/
+│   ├── vm.rs                 — VM, interpreter loop, InterpretResult
+│   ├── gc.rs                 — Mark-sweep garbage collector, Trace trait
+│   ├── heap.rs               — Heap data_structure, GcValue (all reference and complex types)
+│   └── lox_errors.rs          — VmError type
 ├── core/
 │   ├── mod.rs                 — module declarations
 │   ├── chunk.rs               — Chunk, bytecode helpers
@@ -230,5 +234,7 @@ The disassembler prints annotated bytecode to stdout during compilation (enabled
 - `run-length encoding` for line number storage is not yet implemented (tracked in `todo.txt`).
 - The REPL loop in `main.rs` is stubbed — `interpret()` calls `todo!()`.
 - `read_string` in the VM uses `self.ip >= chunk.index_const24` as a heuristic to detect long constants, which is incorrect for some cases.
-- `HashTable` panics if full (no automatic resize / rehashing).
-- String support via `Value::Object(HeapAllocatedObj::String)` is partially kept but superseded by `Value::String(SymbolU32)` — the `Object` variant and `HeapAllocatedObj` can be removed.
+- no rehashing for `HashTable`.
+- Runtime only garbage collection, garbage not collected during compilation.
+- All strings are interned and owned by the string-interner. Therefore they cannot be garbage collected.
+- Replace string-interner with our own Api, to allow string collection by gc.

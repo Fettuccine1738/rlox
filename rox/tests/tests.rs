@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub mod test {
-    use rlox::{
+    use rox::{
         compile::compiler::Compiler,
         runtime::vm::{InterpretResult, VM},
     };
@@ -222,6 +222,25 @@ pub mod test {
                     }
                     outer();
                     print y;
+                    ";
+        let mut vm = VM::new();
+        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    }
+
+    // all objects here is reachable from the roots and should not
+    // be collected.
+    #[test]
+    fn tests_gc_reaches_all() {
+        let src = "
+                        fun makeClosure() {
+                        var x = \"data\";
+                        fun f() {
+                            print x;
+                        }
+                            return f;
+                        }
+                        var closure = makeClosure();
+                        closure();
                     ";
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);

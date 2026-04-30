@@ -1,22 +1,23 @@
 #![allow(unused)]
 use core::panic;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
 use string_interner::symbol::SymbolU32;
 
-//------------Virtual-machine
 use crate::compile::compiler::Compiler;
 use crate::core::chunk::Chunk;
-use crate::core::lang::{CallFrame, Closure};
 use crate::core::opcode::OpCode;
-use crate::core::value::{NativeFn, Value};
+use crate::core::value::{NativeFn, ObjId, Value};
 use crate::data_structures::interner::{self};
 use crate::data_structures::map::HashTable;
-use crate::std::math;
-use crate::std::time;
-use crate::std::{io, strings};
+use crate::runtime::gc::Trace;
+use crate::runtime::heap::{GcObject, GcValue, Heap, LoxClosure, UpValueState};
+use crate::runtime::lang::CallFrame;
+use crate::runtime::lang::Function;
+use crate::std::{io, math, strings, time};
 
 pub const DEBUG_TRACE: bool = true;
 pub const FRAMES_MAX: usize = 64;
@@ -31,14 +32,20 @@ pub enum InterpretResult {
 }
 
 pub struct VM {
-    stack: Vec<Value>,
-    globals: HashTable,
-    call_frames: Vec<CallFrame>,
+    pub stack: Vec<Value>,
+    pub globals: HashTable,
+    pub call_frames: Vec<CallFrame>,
     // when a varialbe moves to the heap, all closures capturing that variable
     // retain a reference  to its one new location. That way when th variable is mutated
     // all closures see the change.
-    open_upvalues: HashMap<usize, Rc<RefCell<Value>>>,
-    // dummy: *mut * mut Value
+    pub open_upvalues: HashMap<usize, ObjId>,
+    heap: Heap, // dummy: *mut * mut Value
+}
+
+impl Trace for VM {
+    fn trace(&self, heap: &mut super::heap::Heap) {
+        todo!()
+    }
 }
 
 impl VM {
@@ -53,6 +60,7 @@ impl VM {
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
             open_upvalues: HashMap::new(),
+            heap: Heap::new(Default::default()),
         }
     }
 
@@ -63,7 +71,8 @@ impl VM {
     pub fn interpret(&mut self, source: String) -> InterpretResult {
         match Compiler::compile(&source) {
             None => InterpretResult::CompileError,
-            Some(rc) => {
+            Some(func) => {
+                println!("{}", func.chunk);
                 self.define_native("io::readNumber".to_owned(), NativeFn(io::read_number));
                 self.define_native("io::readLine".to_owned(), NativeFn(io::read_line));
                 self.define_native("time::clock".to_owned(), NativeFn(time::clock));
@@ -73,12 +82,17 @@ impl VM {
                 self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
 
                 // guard against garbage collection.
-                self.stack.push(Value::LoxFunction(rc.clone()));
+                self.stack.push(Value::LoxFunction(func.clone()));
                 self.stack.pop();
                 //---
-                let closure = Rc::new(Closure::new(rc));
-                self.stack.push(Value::LoxClosure(Rc::clone(&closure)));
-                self.call(closure, 0);
+                let func_clone: Rc<Function> = Rc::clone(&func);
+                let cloj_id = self.heap.alloc_closure(LoxClosure {
+                    function: func.clone(),
+                    upvalues: vec![],
+                    upvalue_count: 0,
+                });
+                self.stack.push(Value::Object(cloj_id));
+                self.call(&func, ObjId(0), 0);
                 self.run()
             }
         }
@@ -105,11 +119,34 @@ impl VM {
         self.call_frames.last().unwrap()
     }
 
+    fn current_chunk(&self) -> &Chunk {
+        let frame = &self.get_current_frame().closure_id;
+        let object = &self.heap.get(*frame).value;
+        if let GcValue::Closure(lox) = object {
+            &lox.function.chunk
+        } else {
+            panic!("");
+        }
+    }
+
+    fn get_frame_closure(&self, closure_id: ObjId) -> &LoxClosure {
+        let object = &self.heap.get(closure_id).value;
+        if let GcValue::Closure(lox) = object {
+            &lox
+        } else {
+            panic!("");
+        }
+    }
+
     fn run(&mut self) -> InterpretResult {
         #[cfg(debug_assertions)]
         if DEBUG_TRACE {
-            for s in &self.stack {
-                println!("{}", s);
+            for v in &self.stack {
+                if let Value::Object(id) = v {
+                    println!("{} => {:?}", v, self.heap.get(*id));
+                } else {
+                    println!("{}", v);
+                }
             }
         }
 
@@ -117,10 +154,7 @@ impl VM {
             #[cfg(debug_assertions)]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
-                Chunk::disassemble_instruction(
-                    &self.get_current_frame().closure.function.chunk,
-                    start,
-                );
+                Chunk::disassemble_instruction(self.current_chunk(), start);
             }
 
             // short lived borrows because borrow checker complains about
@@ -132,16 +166,16 @@ impl VM {
             match instruction {
                 OpCode::Return => {
                     if let Some(result) = self.stack.pop() {
-                        // pop call frame, this is fine since call frames only track what part of the code
-                        // we are in.
-                        self.call_frames.pop();
-                        // empty means we have finished exectuing the top level code.
+                        let frame = self.call_frames.pop().unwrap();
+                        let base = frame.slots;
+                        // close any open upvalues that point into this frame's stack
+                        self.close_upvalues(base);
+                        // truncate frame back to where this frame started
+                        self.stack.truncate(base);
+
                         if self.call_frames.is_empty() {
-                            self.stack.pop(); // pop main script function on the stack.
                             return InterpretResult::Ok;
                         }
-                        let offset = self.get_current_frame().slots;
-                        self.stack.truncate(offset);
                         self.stack.push(result);
                     } else {
                         return InterpretResult::RuntimeError;
@@ -170,6 +204,8 @@ impl VM {
                 | OpCode::Subtract
                 | OpCode::Greater
                 | OpCode::Less => {
+                    // Clox uses peek here to guard against gc, but this is fine for us because
+                    // collection cannot be triggered here.
                     let rhs = self.stack.pop().unwrap();
                     let lhs = self.stack.pop().unwrap();
                     match Self::binary_op(lhs, rhs, instruction) {
@@ -283,58 +319,102 @@ impl VM {
                     if !self.call_value(function, arity) {
                         return InterpretResult::RuntimeError;
                     }
+                    // good time to collect garbage from a function
+                    self.collect_garbage();
                 }
                 OpCode::Closure => {
                     let value = self.read_constant();
                     let function = Value::as_function(&value);
-                    let mut closure = Closure::clone(&function);
+                    let count = function.upvalue_count;
+                    let mut upval_ids = vec![ObjId(0); count];
 
-                    for i in 0..closure.upvalue_count {
+                    for i in 0..count {
                         // encoding [is_long (0 | 1)][(is_long == 0) ? idx_1b : idx_3b][is_local]
                         let is_long = self.read_byte();
                         let index = if is_long == 1 {
-                            let bytes = self.read_3_bytes();
-                            let index = Chunk::inverse_resolve(bytes[0], bytes[1], bytes[2]);
-                            index
+                            let mut arr: [u8; 3] = [255, 255, 255];
+                            // let bytes = self.read_3_bytes(&mut arr);
+                            self.read_3_bytes(&mut arr);
+                            Chunk::inverse_resolve(arr[0], arr[1], arr[2])
                         } else {
                             self.read_byte() as usize
                         };
 
                         let is_local: bool = self.read_byte() == 1;
                         let slot_offset = self.get_current_frame().slots;
-                        closure.upvalues[i] = if is_local {
+                        upval_ids[i] = if is_local {
                             self.capture_upvalue(slot_offset + index)
                         } else {
-                            self.get_current_frame_mut().closure.upvalues[index].clone()
+                            // inherit upvalue from enclosing closure - same ObjId
+                            let id = self.get_current_frame().closure_id;
+                            self.get_frame_closure(id).upvalues[index].clone()
                         };
                     }
-                    self.stack.push(Value::LoxClosure(Rc::new(closure)));
+
+                    let closure = LoxClosure {
+                        function: Rc::clone(&function),
+                        upvalues: upval_ids,
+                        upvalue_count: count,
+                    };
+                    // allocate closure on heap, push ObjId onto stack
+                    let id = self.heap.alloc_closure(closure);
+                    self.stack.push(Value::Object(id));
                 }
                 OpCode::GetUpValue => {
                     // operand is the index into the current function's upvalue array.
-                    let slot = self.read_byte();
-                    let call_frame = self.get_current_frame();
-                    let upvalue = &call_frame.closure.upvalues[slot as usize];
-                    let value = upvalue.location.borrow().clone();
+                    let slot = self.read_byte() as usize;
+                    let id = self.get_current_frame().closure_id;
+                    let id: ObjId = self.get_frame_closure(id).upvalues[slot];
+                    let value: Value = self.heap.get_upvalue(id, &self.stack);
                     self.stack.push(value);
                 }
                 OpCode::SetUpValue => {
-                    let slot = self.read_byte();
+                    let slot = self.read_byte() as usize;
                     let peek_value = self.peek(0);
-                    let callframe = self.get_current_frame_mut();
-                    *callframe.closure.upvalues[slot as usize]
-                        .location
-                        .borrow_mut() = peek_value;
+                    let id = self.get_current_frame().closure_id;
+                    let upval_id: ObjId = self.get_frame_closure(id).upvalues[slot];
                     // assignment is an expression in Lox. so the assigned value remains on the stack.
+                    self.heap.set_upvalue(upval_id, peek_value, &mut self.stack);
                 }
                 OpCode::CloseUpValue => {
                     let slot = self.stack.len() - 1;
-                    self.close_upvalue(slot);
+                    self.close_upvalues(slot);
                     self.stack.pop();
                 }
                 _ => todo!(),
             }
         }
+    }
+
+    /// marks all roots with allocations on the heap
+    /// as grey
+    pub fn collect_garbage(&mut self) {
+        let roots = self.find_roots();
+        self.heap.mark_roots(roots.into_iter());
+        self.heap.trace_references();
+        self.heap.sweep();
+    }
+
+    fn find_roots(&self) -> HashSet<ObjId> {
+        let mut objects = HashSet::new();
+
+        for v in &self.stack {
+            if let Value::Object(id) = v {
+                objects.insert(*id);
+            }
+        }
+
+        for entry in self.globals.iter() {
+            if let Value::Object(id) = entry.get_value() {
+                objects.insert(*id);
+            }
+        }
+
+        for f in &self.call_frames {
+            objects.insert(f.closure_id);
+        }
+
+        objects
     }
 
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
@@ -353,18 +433,30 @@ impl VM {
                     }
                     false
                 }
-                Value::LoxClosure(_) => self.call(Value::as_closure(&callee), arity),
+                Value::Object(id) => {
+                    let object = &self.heap.get(*id).value;
+                    if let GcValue::Closure(clojure) = object {
+                        let function: Rc<Function> = clojure.function.clone();
+                        return self.call(&function, *id, arity);
+                    } else {
+                        false
+                    }
+                }
                 _ => false,
             };
         }
-        self.runtime_error("Can only call functions and classes.");
+        self.runtime_error("Can only call functions, closures and constructors.");
         false
     }
 
     /// Reads a local slot, using the shared upvalue cell when the slot has been captured.
     fn read_local_slot(&self, index: usize) -> Value {
-        if let Some(shared) = self.open_upvalues.get(&index) {
-            shared.borrow().clone()
+        if let Some(id) = self.open_upvalues.get(&index) {
+            match &self.heap.get(*id).value {
+                GcValue::UpValue(UpValueState::Open(slot)) => self.stack[*slot].clone(),
+                GcValue::UpValue(UpValueState::Closed(val)) => val.clone(),
+                _ => panic!("expected upvalue"),
+            }
         } else {
             self.stack[index].clone()
         }
@@ -372,31 +464,49 @@ impl VM {
 
     /// Writes a local slot and keeps any open upvalue for that slot in sync.
     fn write_local_slot(&mut self, index: usize, value: Value) {
-        if let Some(shared) = self.open_upvalues.get(&index) {
-            *shared.borrow_mut() = value.clone();
+        if let Some(id) = self.open_upvalues.get(&index) {
+            // read through the heap object
+            match self.heap.get_mut(*id).value {
+                GcValue::UpValue(UpValueState::Open(slot)) => {
+                    self.stack[slot] = value;
+                }
+                GcValue::UpValue(UpValueState::Closed(ref mut val)) => {
+                    *val = value;
+                }
+                _ => panic!("expected upvalue"),
+            }
+        } else {
+            self.stack[index] = value;
         }
-        self.stack[index] = value;
     }
 
-    /// checks if a closure already captured an UpValue and resuses if true.
+    /// Close all upvalues that point at or above `last` on the stack.
+    pub fn close_upvalues(&mut self, last: usize) {
+        let slots_to_close: Vec<usize> = self
+            .open_upvalues
+            .keys()
+            .filter(|&&slot| slot >= last)
+            .copied()
+            .collect();
+
+        for slot in slots_to_close {
+            let id = self.open_upvalues.remove(&slot).unwrap();
+            let val = self.stack[slot].clone();
+            self.heap.get_mut(id).value = GcValue::UpValue(UpValueState::Closed(val));
+        }
+    }
+
+    /// checks if a closure already captured an UpValue and reuses if true.
     /// else creates a new rumtime representation for it.
-    fn capture_upvalue(&mut self, index: usize) -> RtimeUpValue {
-        if let Some(existing) = self.open_upvalues.get(&index) {
-            return RtimeUpValue {
-                location: Rc::clone(existing),
-            };
+    fn capture_upvalue(&mut self, slot: usize) -> ObjId {
+        if let Some(&id) = self.open_upvalues.get(&slot) {
+            return id;
         }
 
-        let shared = Rc::new(RefCell::new(self.stack[index].clone()));
-        self.open_upvalues.insert(index, Rc::clone(&shared));
-        RtimeUpValue { location: shared }
-    }
-
-    /// closes every open upvalue that sits above this index.
-    /// IN Clox, the pointer to the closed value points to locations referent.
-    /// we don't need this since location is already an Rc and maintains a reference to it.
-    fn close_upvalue(&mut self, index: usize) {
-        self.open_upvalues.retain(|&slot, _| slot < index);
+        let value = GcValue::UpValue(UpValueState::Open(slot));
+        let id = self.heap.alloc(GcObject::new(value));
+        self.open_upvalues.insert(slot, id);
+        id
     }
 
     // takes name of function and the Funtion ptr
@@ -411,12 +521,10 @@ impl VM {
         self.pop();
     }
 
-    fn call(&mut self, clojure: Rc<Closure>, arity: u8) -> bool {
-        if arity != clojure.function.arity {
-            let err_msg: String = format!(
-                "Expected {} arguments but got {}",
-                clojure.function.arity, arity
-            );
+    fn call(&mut self, function: &Rc<Function>, closure_id: ObjId, arity: u8) -> bool {
+        if arity != function.arity {
+            let err_msg: String =
+                format!("Expected {} arguments but got {}", function.arity, arity);
             Self::runtime_error(self, &err_msg);
             return false;
         }
@@ -426,10 +534,10 @@ impl VM {
             return false;
         }
         // [ fn ] [ arg0 ] [ arg1 ] [ arg2 ]  <-- stackTop
-        // ^      | -------args to fn ------
+        // ^      | -------args to function ------
         // slots points here (slot 0 = the function being called)
         self.call_frames.push(CallFrame {
-            closure: clojure.clone(), // note rc cloned before passing in, use clojure.
+            closure_id: closure_id, // note rc cloned before passing in, use clojure.
             ip: 0,
             slots: self.stack.len() - arity as usize - 1,
         });
@@ -443,9 +551,15 @@ impl VM {
             // - 1 because ip points to the next instruction to be executed
             // but the failed instruction was the previous one.
             let instruction: usize = frame.ip - 1;
-            let line = frame.closure.function.chunk.lines[instruction];
+            let line = self
+                .get_frame_closure(frame.closure_id)
+                .function
+                .chunk
+                .lines[instruction];
+            let name = &self.get_frame_closure(frame.closure_id).function.name;
+
             eprint!("[line {}] in ", line.0);
-            match &frame.closure.function.name {
+            match &name {
                 Some(name) => eprintln!("{}", name),
                 None => eprintln!("Script"),
             }
@@ -456,7 +570,7 @@ impl VM {
 
     // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
     fn read_constant(&mut self) -> Value {
-        let is_long = self.call_frames.last().unwrap().read_long();
+        let is_long = self.call_frames.last().unwrap().is_long(&self.heap);
         let index = if is_long {
             let b1 = self.read_byte() as u32;
             let b2 = self.read_byte() as u32;
@@ -467,12 +581,7 @@ impl VM {
             self.read_byte() as u32
         };
 
-        self.call_frames
-            .last()
-            .unwrap()
-            .closure
-            .function
-            .chunk
+        self.current_chunk()
             .constants
             .get(index as usize)
             .expect("Invalid constant index.")
@@ -489,24 +598,33 @@ impl VM {
     }
 
     fn read_byte(&mut self) -> u8 {
-        let call_frame = self.call_frames.last_mut().unwrap();
-        let byte_code: &u8 = call_frame
-            .closure
+        let call_frame = self.call_frames.last().unwrap();
+        let id = call_frame.closure_id;
+        let ip = call_frame.ip;
+
+        let byte_code: u8 = self
+            .get_frame_closure(id)
             .function
             .chunk
             .code
-            .get(call_frame.ip)
+            .get(ip)
+            .copied()
             .unwrap();
-        call_frame.ip += 1; // point to next byte_code.
-        *byte_code
+
+        self.call_frames.last_mut().unwrap().ip += 1;
+        byte_code
     }
 
-    fn read_3_bytes(&mut self) -> &[u8] {
-        let call_frame = self.call_frames.last_mut().unwrap();
-        let bytes: &[u8] =
-            &call_frame.closure.function.chunk.code[call_frame.ip..call_frame.ip + 3];
-        call_frame.ip += 3; // point to next byte_code.
-        bytes
+    fn read_3_bytes(&mut self, buffer: &mut [u8; 3]) {
+        let (ip, closure_id) = {
+            let frame = self.call_frames.last_mut().unwrap();
+            let ip = frame.ip;
+            frame.ip += 3;
+            (ip, frame.closure_id)
+        };
+
+        let func = self.get_frame_closure(closure_id).function.clone();
+        buffer.copy_from_slice(&func.chunk.code[ip..ip + 3]);
     }
 
     fn binary_op(lhs: Value, rhs: Value, opcode: OpCode) -> Option<Value> {
@@ -528,41 +646,6 @@ impl VM {
         match self.read_constant() {
             Value::String(symbol) => Some(symbol), // interner::get_string(symbol),
             _ => None,
-        }
-    }
-}
-
-// runtime representation of UpValues
-use std::cell::RefCell;
-/// Multiple closures can close over the same variable, so we never
-/// own the variable it references.
-#[derive(Debug, Default, PartialEq, PartialOrd, Clone)]
-pub struct RtimeUpValue {
-    // FIXME: this feels like over kill.
-    pub location: Rc<RefCell<Value>>,
-}
-
-/// Open UpValue refer to an upvalue that points to a local variable still on the stack.
-/// Closed refers to a variable moved to the Heap.
-enum UpValueState {
-    Open(usize), // index into the vm's stack.
-    Closed(Value),
-}
-
-pub struct ObjUpValue {
-    state: Rc<RefCell<UpValueState>>,
-}
-
-impl RtimeUpValue {
-    pub fn new(value: Value) -> Self {
-        Self {
-            location: Rc::new(RefCell::new(value)),
-        }
-    }
-
-    pub fn clone(value: Rc<RefCell<Value>>) -> Self {
-        Self {
-            location: Rc::clone(&value),
         }
     }
 }

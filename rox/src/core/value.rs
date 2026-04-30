@@ -8,10 +8,20 @@ use std::{
 use string_interner::symbol::SymbolU32;
 
 use crate::{
-    core::lang::{Closure, Function},
     data_structures::interner::{self},
+    runtime::lang::Function,
     std::VmResult,
 };
+
+/// Java-style reference id to an object stored on the heap.
+/// the inner field is the objects index on the Heap managed by the GC.
+/// this allows mulitple owners using this id to modify / read the object's content
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+pub struct ObjId(pub usize);
+
+// stub struct
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct Closure;
 
 /// A tagged Union: A value contains 2 parts: a type "tag" and a
 /// payload for the actual value.
@@ -22,12 +32,12 @@ pub enum Value {
     #[default]
     Nil,
     Number(f64),
-    LoxFunction(Rc<crate::core::lang::Function>),
+    LoxFunction(Rc<Function>),
     // interned strings allow us to compare addreses(symbols) which is more efficient
     // than comparing the values(contents) of the strings themselves.
     String(SymbolU32),
     NativeFunction(NativeFn),
-    LoxClosure(Rc<Closure>),
+    Object(ObjId), // pointer into the GC Heap
 }
 
 impl Value {
@@ -54,10 +64,6 @@ impl Value {
         matches!(value, Value::Nil)
     }
 
-    pub fn is_closure(value: &Value) -> bool {
-        matches!(value, Value::LoxClosure(_))
-    }
-
     pub fn is_number(value: &Value) -> bool {
         matches!(value, Value::Number(_))
     }
@@ -67,8 +73,8 @@ impl Value {
     }
 
     pub fn is_object(value: &Value) -> bool {
-        matches!(value, Value::LoxClosure(_))
-            || matches!(value, Value::LoxFunction(_))
+        matches!(value, Value::LoxFunction(_))
+            || matches!(value, Value::Object(_))
             || matches!(value, Value::NativeFunction(_))
     }
 
@@ -100,20 +106,20 @@ impl Value {
         }
     }
 
-    // TODO: deduplicate and merge with as_function()
-    pub fn as_closure(value: &Value) -> Rc<Closure> {
-        if let Value::LoxClosure(clj) = value {
-            return clj.clone();
-        } else {
-            panic!("Expected Variant closure but got {:?}", value);
-        }
-    }
-
     pub fn as_function(value: &Value) -> Rc<Function> {
         if let Value::LoxFunction(boxed_f) = value {
             return boxed_f.clone();
         } else {
             panic!("Expected Variant boolean but got {:?}", value);
+        }
+    }
+
+    pub fn as_object(value: &Value) -> Value {
+        if !Self::is_object(value) {}
+        match value {
+            Self::LoxFunction(_) => Value::LoxFunction(Value::as_function(value)),
+            Self::Object(o) => Value::Object(*o),
+            _ => panic!("Value::Obj expected but got"),
         }
     }
 
@@ -125,6 +131,7 @@ impl Value {
             (Value::String(lsz), Value::String(rsz)) => lsz == rsz,
             (Value::Nil, _) => false, // allow java style value != null.
             (_, Value::Nil) => false,
+            (Value::Object(id), Value::Object(oid)) => id == oid,
             _ => false,
         }
     }
@@ -151,10 +158,7 @@ impl Display for Value {
                 Some(name) => write!(f, "<fn {}>", name),
                 None => write!(f, "<script>"),
             },
-            Value::LoxClosure(c) => match &c.function.name {
-                Some(name) => write!(f, "<fn {}>", name),
-                None => write!(f, "<script>"),
-            },
+            Value::Object(o) => write!(f, "Object@{}", o.0),
             _ => todo!(),
         }
     }
