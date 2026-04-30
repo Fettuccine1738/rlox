@@ -15,10 +15,6 @@ pub struct Function {
 }
 
 impl PartialEq for Function {
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
-
     fn eq(&self, other: &Self) -> bool {
         self.arity == other.arity && self.name == other.name
     }

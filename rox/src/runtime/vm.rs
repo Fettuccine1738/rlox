@@ -48,6 +48,12 @@ impl Trace for VM {
     }
 }
 
+impl Default for VM {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VM {
     pub fn init(&mut self) {
         self.reset_stack();
@@ -132,7 +138,7 @@ impl VM {
     fn get_frame_closure(&self, closure_id: ObjId) -> &LoxClosure {
         let object = &self.heap.get(closure_id).value;
         if let GcValue::Closure(lox) = object {
-            &lox
+            lox
         } else {
             panic!("");
         }
@@ -328,7 +334,8 @@ impl VM {
                     let count = function.upvalue_count;
                     let mut upval_ids = vec![ObjId(0); count];
 
-                    for i in 0..count {
+                    for item in upval_ids.iter_mut().take(count) {
+                    // for i in 0..count {
                         // encoding [is_long (0 | 1)][(is_long == 0) ? idx_1b : idx_3b][is_local]
                         let is_long = self.read_byte();
                         let index = if is_long == 1 {
@@ -342,12 +349,12 @@ impl VM {
 
                         let is_local: bool = self.read_byte() == 1;
                         let slot_offset = self.get_current_frame().slots;
-                        upval_ids[i] = if is_local {
+                        *item = if is_local {
                             self.capture_upvalue(slot_offset + index)
                         } else {
                             // inherit upvalue from enclosing closure - same ObjId
                             let id = self.get_current_frame().closure_id;
-                            self.get_frame_closure(id).upvalues[index].clone()
+                            self.get_frame_closure(id).upvalues[index]
                         };
                     }
 
@@ -537,7 +544,7 @@ impl VM {
         // ^      | -------args to function ------
         // slots points here (slot 0 = the function being called)
         self.call_frames.push(CallFrame {
-            closure_id: closure_id, // note rc cloned before passing in, use clojure.
+            closure_id, // note rc cloned before passing in, use clojure.
             ip: 0,
             slots: self.stack.len() - arity as usize - 1,
         });

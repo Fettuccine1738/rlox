@@ -31,13 +31,19 @@ impl Display for Chunk {
     }
 }
 
+impl Default for Chunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Chunk {
     pub const fn new() -> Self {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
             lines: Vec::new(),
-            index_const24: std::usize::MAX, // Sentinel.
+            index_const24: usize::MAX, // Sentinel.
         }
     }
 
@@ -141,7 +147,7 @@ impl Chunk {
                     (offset + 4, index)
                 };
                 print!("OP_CLOSURE {:04}", constant);
-                let function = Value::as_function(&chunk.constants[constant as usize]);
+                let function = Value::as_function(&chunk.constants[constant]);
                 for _ in 0..function.upvalue_count {
                     // encoding [is_long][idx_1b or idx_3b][is_local]
                     // is_long ? idx_3b : idx_1b (3b = 3bytes. upvalue may point to slot > 255.)
@@ -215,10 +221,7 @@ impl Chunk {
         let index = self.code[offset + 1]; // index of value is embeded in the bytecode stream.
 
         #[cfg(any(test, debug_assertions))]
-        match self.constants[index as usize] {
-            Value::String(id) => println!("{}", interner::get_string(id).unwrap()),
-            _ => (),
-        }
+        if let Value::String(id) = self.constants[index as usize] { println!("{}", interner::get_string(id).unwrap()) }
 
         offset + 2 // consume current bytecode and operand index.
     }
@@ -228,7 +231,7 @@ impl Chunk {
     fn read_long_constant(&self, offset: usize) -> usize {
         let bytes = &self.code[offset + 1..offset + 4];
         let idx = (bytes[0] as u32) | (bytes[1] as u32) << 8 | (bytes[2] as u32) << 16; // 24 bits
-        return idx as usize;
+        idx as usize
     }
 
     fn read_constant(&self, offset: usize) -> usize {

@@ -108,14 +108,14 @@ impl Value {
 
     pub fn as_function(value: &Value) -> Rc<Function> {
         if let Value::LoxFunction(boxed_f) = value {
-            return boxed_f.clone();
+            boxed_f.clone()
         } else {
             panic!("Expected Variant boolean but got {:?}", value);
         }
     }
 
     pub fn as_object(value: &Value) -> Value {
-        if !Self::is_object(value) {}
+        Self::is_object(value);
         match value {
             Self::LoxFunction(_) => Value::LoxFunction(Value::as_function(value)),
             Self::Object(o) => Value::Object(*o),
@@ -201,7 +201,7 @@ impl Add for Value {
                 Some(mut string) => {
                     string.push_str(&n.to_string());
                     let symbol = interner::intern(&string);
-                    return Some(Value::String(symbol));
+                    Some(Value::String(symbol))
                 }
                 None => None,
             },
@@ -211,7 +211,7 @@ impl Add for Value {
                         let mut new_string = n.to_string(); // order matters here.
                         new_string.push_str(&string);
                         let symbol = interner::intern(&new_string);
-                        return Some(Value::String(symbol));
+                        Some(Value::String(symbol))
                     }
                     None => None,
                 }

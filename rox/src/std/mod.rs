@@ -95,7 +95,7 @@ pub mod io {
 
         match read() {
             Ok(buffer) => {
-                let symbol = interner::intern(&buffer.trim());
+                let symbol = interner::intern(buffer.trim());
                 Ok(Value::String(symbol))
             }
             Err(e) => Err(VmError::Native(e.to_string())),
@@ -143,19 +143,19 @@ pub mod strings {
             (Value::String(s_1), Value::String(s_2)) => {
                 match (interner::get_string(*s_1), interner::get_string(*s_2)) {
                     (Some(sl), Some(sr)) => {
-                        return Ok(Value::Number((sl.cmp(&sr) as i8) as f64));
+                        Ok(Value::Number((sl.cmp(&sr) as i8) as f64))
                     }
                     _ => {
-                        return Err(VmError::Native(
+                        Err(VmError::Native(
                             "One of the Strings passed in does not exist.".to_string(),
-                        ));
+                        ))
                     }
                 }
             }
             _ => {
-                return Err(VmError::Native(
+                Err(VmError::Native(
                     "string compare expected type of Strings.".to_string(),
-                ));
+                ))
             }
         }
     }

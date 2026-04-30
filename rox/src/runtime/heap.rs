@@ -108,7 +108,7 @@ impl Heap {
             grey_stack: vec![],
             bytes_allocated: 0,
             next_gc: GC_THRESHOLD,
-            gc_mode: gc_mode,
+            gc_mode,
         }
     }
 
@@ -175,16 +175,13 @@ impl Heap {
                     obj.is_marked = false; // reset for next cycle
                 }
                 slot => {
-                    match self.gc_mode {
-                        GcMode::Log => {
-                            let size: usize = std::mem::size_of::<GcObject>();
-                            println!(
-                                " collected {size} bytes (at {:p} for {:#?}",
-                                slot,
-                                slot.as_ref()
-                            );
-                        }
-                        _ => (),
+                    if let GcMode::Log = self.gc_mode {
+                        let size: usize = std::mem::size_of::<GcObject>();
+                        println!(
+                            " collected {size} bytes (at {:p} for {:#?}",
+                            slot,
+                            slot.as_ref()
+                        );
                     }
                     *slot = None;
                 }
@@ -195,7 +192,7 @@ impl Heap {
     fn is_marked(&mut self, id: ObjId) -> bool {
         self.objects[id.0]
             .as_ref()
-            .map_or(false, |obj| obj.is_marked)
+            .is_some_and(|obj| obj.is_marked)
     }
 
     fn set_marked(&mut self, id: ObjId, marked: bool) {

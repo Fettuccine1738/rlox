@@ -78,6 +78,12 @@ impl<'a> Iterator for IterMut<'a> {
     }
 }
 
+impl Default for HashTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HashTable {
     pub const fn new() -> Self {
         Self {
@@ -121,7 +127,7 @@ impl HashTable {
 
     // returns true if no previous entry existed. i.e inserted new value.
     pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
-        let entry = Some(Entry { key: key, value: v });
+        let entry = Some(Entry { key, value: v });
         if self.entries.is_empty() {
             self.entries.push(entry);
             self.len += 1;
@@ -163,9 +169,9 @@ impl HashTable {
         match self.get_key_index(key) {
             ProbeResult::Found(index) => {
                 let entry = self.entries[index].as_ref();
-                return Some(entry.unwrap().value.clone());
+                Some(entry.unwrap().value.clone())
             }
-            _ => return None,
+            _ => None,
         }
     }
 
@@ -197,11 +203,8 @@ impl HashTable {
     }
 
     pub fn contains_key(&self, key: SymbolU32) -> bool {
-        match self.get_key_index(key) {
-            ProbeResult::Found(_) => true,
-            _ => false,
-        }
-    }
+        matches!(self.get_key_index(key), ProbeResult::Found(_)) 
+   }
 }
 
 // holds iterator state.

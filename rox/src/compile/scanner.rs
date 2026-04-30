@@ -30,7 +30,7 @@ impl<'src> Scanner<'src> {
 
         let ch: char = self.advance();
 
-        if ch.is_digit(10) {
+        if ch.is_ascii_digit() {
             return Some(self.number());
         }
 
@@ -86,7 +86,7 @@ impl<'src> Scanner<'src> {
 
     fn identifier(&mut self) -> Token<'src> {
         while Self::is_alpha(self.peek().unwrap())
-            || self.peek().unwrap().is_digit(10)
+            || self.peek().unwrap().is_ascii_digit()
             || self.peek().unwrap() == ':'
         {
             // allow ::qualifier for native functions.
@@ -138,7 +138,7 @@ impl<'src> Scanner<'src> {
 
     fn number(&mut self) -> Token<'src> {
         while let Some(ch) = self.peek() {
-            if ch.is_digit(10) {
+            if ch.is_ascii_digit() {
                 self.advance();
             } else {
                 break;
@@ -147,11 +147,11 @@ impl<'src> Scanner<'src> {
 
         if let Some('.') = self.peek() {
             let nxt = self.source.as_bytes()[self.current + 1] as char;
-            if nxt.is_digit(10) {
+            if nxt.is_ascii_digit() {
                 self.advance(); // consume '.'
                 self.advance(); // consume 'nxt'
                 while let Some(ch) = self.peek() {
-                    if ch.is_digit(10) {
+                    if ch.is_ascii_digit() {
                         self.advance();
                     } else {
                         break;
@@ -164,9 +164,8 @@ impl<'src> Scanner<'src> {
     }
 
     fn match_next_char(&mut self, expect: char) -> bool {
-        if self.is_at_end() {
-            false
-        } else if expect != (self.source.as_bytes()[self.current] as char) {
+        if self.is_at_end() ||
+         expect != (self.source.as_bytes()[self.current] as char) {
             false
         } else {
             self.current += 1;
@@ -235,7 +234,7 @@ impl<'src> Scanner<'src> {
 
     fn make_token(&self, kind: Kind) -> Token<'src> {
         Token {
-            kind: kind,
+            kind,
             lexeme: &self.source[self.start..self.current],
             line: self.line,
         }

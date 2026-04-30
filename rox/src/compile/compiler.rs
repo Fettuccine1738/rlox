@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::{mem, usize};
+use std::{mem};
 
 use super::parser::Parser;
 use super::token::Kind;
@@ -11,7 +11,7 @@ use crate::core::value::Value;
 use crate::data_structures::interner::{self};
 use crate::runtime::{lang::Function, lang::FunctionType};
 
-pub const FUNCTION_ARG_MAX: u8 = 255;
+pub const FUNCTION_ARG_MAX: u32 = 255;
 pub const LONG_UPVALUE_INDEX: u8 = 1; // index of a captured value sitting on slot > 255
 pub const SHORT_UPVALUE_INDEX: u8 = 0; // vice versa
 // dummy Parse Rule, required in cases where an error occured,
@@ -188,7 +188,7 @@ impl<'src> Compiler<'src> {
         let index: usize = self.current_chunk().add_if_absent(value);
         // this lets us record the index that triggers the use of OpCode::Constant24, where reading 3 bytes
         // must be read to get the index of a constant from the constant pool.
-        if self.current_chunk().index_const24 == std::usize::MAX && index > 255 {
+        if self.current_chunk().index_const24 == usize::MAX && index > 255 {
             self.current_chunk().save_index();
         }
 
@@ -313,13 +313,13 @@ impl<'src> Compiler<'src> {
         // consume parameters
         if !inner.check(Kind::RightParen) {
             loop {
-                inner.function.arity += 1;
-                if inner.function.arity > FUNCTION_ARG_MAX {
+                if (inner.function.arity as u32 + 1) > FUNCTION_ARG_MAX {
                     inner
                         .parser
                         .borrow_mut()
                         .error_at_current("Function cannot have more than 255 parameters.");
                 }
+                inner.function.arity += 1;
                 // we probably should also make is_const true at some point and force unique function names.
                 let constant = inner.parse_variable("Expect parameter name", false);
                 inner.define_variable(constant, false);
@@ -474,16 +474,15 @@ impl<'src> Compiler<'src> {
     /// every variable reference has been resolved as either a local, an upvalue, or a global
     fn resolve_upvalue(&mut self, name: &Token) -> Option<(usize, bool)> {
         // we are currently in the outer most compiler
-        let Some(enclosing) = self.enclosing.as_mut() else {
-            return None;
-        };
+        let enclosing = self.enclosing.as_mut()?;
+          
 
         // reucursive call to search all the way back to the outermost compiler.
         let local: Option<(usize, bool)> = enclosing.resolve_local(name);
         // index refers to the index of the slot in its the enclosing locals
         if let Some((index, is_const)) = local {
             // value_index is the index of the captured up value in its own local array.
-            (*enclosing).locals[index].is_captured = true;
+            enclosing.locals[index].is_captured = true;
             let value_index = self.add_upvalue(index, true);
             return Some((value_index, is_const));
         }
@@ -491,9 +490,9 @@ impl<'src> Compiler<'src> {
         if let Some((index, is_const)) = enclosing.resolve_upvalue(name) {
             // we know its not local because the enclosing couldn't find in its locals.
             let value_index = self.add_upvalue(index, false);
-            return Some((value_index, is_const));
+            Some((value_index, is_const))
         } else {
-            return None;
+            None
         }
     }
 
@@ -613,12 +612,9 @@ impl<'src> Compiler<'src> {
         }
 
         self.emit_loop(loop_start);
-        match exit_jump {
-            Some(jump) => {
-                self.patch_jump(jump);
-                self.emit_opcode(OpCode::Pop);
-            }
-            _ => (),
+        if let Some(jump) = exit_jump {
+            self.patch_jump(jump);
+            self.emit_opcode(OpCode::Pop);
         }
 
         if !self.match_token(Kind::RightParen) {
@@ -658,7 +654,7 @@ impl<'src> Compiler<'src> {
         self.emit_opcode(OpCode::Loop);
 
         let offset = self.count() - start + 2;
-        if offset as u16 > std::u16::MAX {
+        if offset as u16 > u16::MAX {
             self.parser.borrow_mut().error("Loop body too large.");
         }
         self.emit_byte((offset & 0xff) as u8);
@@ -695,14 +691,14 @@ impl<'src> Compiler<'src> {
     // otherwise we discard the lhs and evaluate the rhs as the result of the whole and expression.
     // (lhs: Value on stack) [OP_JUMP_IF_FALSE, OP_POP] (rhs: not yet compiled.) {end_jump + vm.ip : jumps here after if lhs is false}
     //                      ^(current)         (if value is true: pop lhs off the stack and evaluate rhs as final)
-    fn and(&mut self, can_assign: bool) {
+    fn and(&mut self, _can_assign: bool) {
         let end_jump = self.emit_jump(OpCode::JumpIfFalse);
         self.emit_opcode(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.patch_jump(end_jump);
     }
 
-    fn or(&mut self, can_assign: bool) {
+    fn or(&mut self, _can_assign: bool) {
         let else_jump = self.emit_jump(OpCode::JumpIfFalse);
         let end_jump = self.emit_jump(OpCode::Jump);
 
@@ -730,7 +726,7 @@ impl<'src> Compiler<'src> {
         // jump is how many bytecodes have been generated since we consumed the if stmt.
         let jump = self.count() - 2 - offset;
 
-        if jump as u16 > std::u16::MAX {
+        if jump as u16 > u16::MAX {
             self.parser
                 .borrow_mut()
                 .error("Too much code to jump over.");

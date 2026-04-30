@@ -56,13 +56,13 @@ impl<'src> Parser<'src> {
 
     /// --------------error handling--------------
     pub fn error_at_current(&mut self, message: &str) {
-        self.error_at(self.current.clone(), message);
+        self.error_at(self.current, message);
     }
 
     pub fn error(&mut self, message: &str) {
         // unbelievable this would not work., would Token be valid after this call ??
         // self.error_at(self.previous, message);
-        self.error_at(self.previous.clone(), message);
+        self.error_at(self.previous, message);
     }
 
     fn error_at(&mut self, token: Token<'src>, message: &str) {
