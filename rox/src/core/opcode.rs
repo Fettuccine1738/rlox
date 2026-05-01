@@ -39,13 +39,17 @@ pub enum OpCode {
     Class = 31,
     GetProperty = 32,
     SetProperty = 33,
-    // Design choice on why OpCodes for !=, <=, >= are not implemented.
-    // the bytecode instructions does not need to follow closely to the user's
-    // source code. The VM has total freedom to use whatever instruction set and code sequence
-    // as long as they have the right behavior.
-    // Semantically: a != b  === !(a == b)
-    // a <= b === !(a > b)
-    // a >= b === !(a < b). except for floating-point NaN
+    Method = 34,
+    Invoke = 35,
+    Inherit = 36,
+    GetSuper = 37,
+    SuperInvoke = 38, // Design choice on why OpCodes for !=, <=, >= are not implemented.
+                      // the bytecode instructions does not need to follow closely to the user's
+                      // source code. The VM has total freedom to use whatever instruction set and code sequence
+                      // as long as they have the right behavior.
+                      // Semantically: a != b  === !(a == b)
+                      // a <= b === !(a > b)
+                      // a >= b === !(a < b). except for floating-point NaN
 }
 
 impl Display for OpCode {
@@ -95,6 +99,11 @@ impl TryFrom<u8> for OpCode {
             31 => Ok(Self::Class),
             32 => Ok(Self::GetProperty),
             33 => Ok(Self::SetProperty),
+            34 => Ok(Self::Method),
+            35 => Ok(Self::Invoke),
+            36 => Ok(Self::Inherit),
+            37 => Ok(Self::GetSuper),
+            38 => Ok(Self::SuperInvoke),
             _ => Err(()),
         }
     }

@@ -5,6 +5,16 @@ pub struct Token<'src> {
     pub line: u32,
 }
 
+impl Token<'static> {
+    pub const fn synthetic(lexeme: &'static str, line: u32) -> Self {
+        Self {
+            kind: Kind::Identifier,
+            lexeme,
+            line,
+        }
+    }
+}
+
 impl Default for Token<'static> {
     fn default() -> Self {
         Self {

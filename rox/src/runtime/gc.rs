@@ -1,10 +1,3 @@
-// Implementation where  Heap is a thread-safe global structure
-// and not owned by the VM.
-// use crate::runtime::heap::Heap;
-// use std::sync::{LazyLock, Mutex};
-// type Mutex_Heap = LazyLock<Mutex<Heap>>;
-// pub(crate) static GLOBAL_HEAP: Mutex_Heap = LazyLock::new(|| Mutex::new(StringInterner::default()));
-
 pub trait Trace {
     fn trace(&self, heap: &mut super::heap::Heap);
 }

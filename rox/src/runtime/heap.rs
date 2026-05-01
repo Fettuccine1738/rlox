@@ -1,6 +1,9 @@
 #![allow(unused)]
+use std::array;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
+use std::ops::Bound;
 use std::rc::Rc;
 
 use crate::core::value::ObjId;
@@ -33,6 +36,22 @@ impl GcObject {
         }
     }
 
+    pub fn as_function(&self) -> Option<Rc<Function>> {
+        if let GcValue::Closure(lc) = &self.value {
+            return Some(lc.function.clone());
+        }
+        None
+    }
+
+    // WARNING: always clone the GcOBject before use, because we consume
+    // its value
+    pub fn as_class(self) -> Option<LoxClass> {
+        if let GcValue::Class(lc) = self.value {
+            return Some(lc);
+        }
+        None
+    }
+
     pub fn is_instance(&self) -> bool {
         matches!(self.value, GcValue::Instance(_))
     }
@@ -44,21 +63,52 @@ impl GcObject {
     pub fn is_class(&self) -> bool {
         matches!(self.value, GcValue::Class(_))
     }
+
+    pub fn is_method(&self) -> bool {
+        matches!(self.value, GcValue::Method(_))
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct BoundMethod;
+#[derive(Debug, Clone, Copy, Trace)]
+pub struct BoundMethod {
+    pub receiver: ObjId, // points to the LoxInstance
+    pub closure: ObjId,  //  points to the LoxClosure on the heap
+}
+
+impl BoundMethod {
+    pub fn new(receiver: ObjId, closure: ObjId) -> Self {
+        Self { receiver, closure }
+    }
+}
 
 /// Classes : are how we create new instances, name required to get instance
 /// contain methods: behavior of Instances
 #[derive(Debug, Clone)]
 pub struct LoxClass {
-    name: String, // we can use LoxString here but this is easier
+    name: String,       // we can use LoxString here but this is easier for debugging
+    methods: HashTable, // HashMap<SymbolU32, Function>
+}
+
+impl Trace for LoxClass {
+    fn trace(&self, heap: &mut super::heap::Heap) {
+        heap.mark_table(&self.methods);
+    }
 }
 
 impl LoxClass {
     pub fn new(name: String) -> Self {
-        Self { name }
+        Self {
+            name,
+            methods: HashTable::new(),
+        }
+    }
+
+    pub fn add_method(&mut self, name: SymbolU32, method: ObjId) {
+        let _ = self.methods.insert(name, Value::Object(method));
+    }
+
+    pub fn get_method(&self, name: SymbolU32) -> Option<Value> {
+        self.methods.get(name)
     }
 }
 
@@ -69,7 +119,7 @@ impl LoxClass {
 /// program, no matter what class it is an instance of, is an ObjInstance.
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
-    class: ObjId,
+    pub class: ObjId,
     fields: HashTable,
 }
 
@@ -152,11 +202,11 @@ pub enum UpValueState {
 
 #[derive(Debug, Clone, Trace)]
 pub enum GcValue {
-    #[unsafe_ignore_trace]
     Instance(LoxInstance),
-    #[unsafe_ignore_trace]
-    BoundMethod(BoundMethod),
-    #[unsafe_ignore_trace] // classes are static and should not be collected.
+    Method(BoundMethod),
+    // we trace through Objects to get to a class,
+    // if unreachable through any objects we collect the Class except  classes declared globally
+    // will surely not be collected because they are also declared in the global table.
     Class(LoxClass),
     Closure(LoxClosure),
     #[unsafe_ignore_trace]
@@ -339,6 +389,20 @@ impl Heap {
             is_marked: false,
             value: GcValue::Closure(closure),
         })
+    }
+
+    pub fn orchestrate_inherit(&mut self, superclass: ObjId, subclass: ObjId) -> bool {
+        let super_obj = self.objects[superclass.0].clone();
+        if super_obj.is_some() {
+            if let Some(supa) = super_obj.unwrap().as_class()
+                && let GcValue::Class(sub) = &mut self.objects[subclass.0].as_mut().unwrap().value
+            {
+                sub.methods.add_all(supa.methods);
+                return true;
+            }
+            return false;
+        }
+        false
     }
 
     fn collect_garbage(&mut self) {
