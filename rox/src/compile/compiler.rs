@@ -1,6 +1,6 @@
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
-use std::{mem};
 
 use super::parser::Parser;
 use super::token::Kind;
@@ -164,6 +164,7 @@ impl<'src> Compiler<'src> {
         self.emit_bytes(op_1 as u8, op_2 as u8);
     }
 
+    // emits the opcode and the argument to this opcode
     fn emit_opcode_operand(&mut self, opcode: OpCode, index: usize) {
         self.emit_opcode(opcode);
         // resolve constant operand
@@ -237,8 +238,9 @@ impl<'src> Compiler<'src> {
     }
 
     fn declaration(&mut self) {
-        // if current token is Kind::Var consume the variable's (lexeme) name.
-        if self.match_token(Kind::Fun) {
+        if self.match_token(Kind::Class) {
+            self.class_declaration();
+        } else if self.match_token(Kind::Fun) {
             self.func_declaration();
         } else if self.match_token(Kind::Var) {
             self.variable_declaration(false);
@@ -269,6 +271,42 @@ impl<'src> Compiler<'src> {
             self.expression();
             self.consume(Kind::SemiColon, "Expect ';' after return value.");
             self.emit_opcode(OpCode::Return);
+        }
+    }
+
+    fn class_declaration(&mut self) {
+        self.consume(Kind::Identifier, "Expect class name");
+        let previous = self.parser.borrow().previous;
+        // weird thing we have to do so identifier_constant does not throw errors
+        let _ = interner::intern(previous.lexeme);
+        // name_idx is the index of its interned string name in the constants pool
+        // this helps the runtime find the class name
+        let name_idx = self.identifier_constant(previous);
+        self.declare_variable(true);
+        self.emit_opcode_operand(OpCode::Class, name_idx);
+        // the class name (agin index in constant pool) is used to bind
+        // instruction to create class object at runtime, takes the constant
+        // table index of the class's name as an operand
+        self.define_variable(name_idx, true);
+
+        self.consume(Kind::LeftBrace, "Expect `{` before class body.");
+        self.consume(Kind::RightBrace, "Expect `}` after class body.");
+    }
+
+    fn dot(&mut self, can_assign: bool) {
+        self.consume(Kind::Identifier, "Expect property name after `.`.");
+        let previous = self.parser.borrow().previous;
+        interner::intern(previous.lexeme);
+        let name: usize = self.identifier_constant(previous);
+
+        // TODO: how to support consts fields, if not defined beforehand?
+        // to avoid calling a set/get proprty in  a context with high precedence
+        // i.e a + b.c = 3 :: compiled as a + (b.c = 3)
+        if can_assign && self.match_token(Kind::Equal) {
+            self.expression();
+            self.emit_opcode_operand(OpCode::SetProperty, name);
+        } else {
+            self.emit_opcode_operand(OpCode::GetProperty, name);
         }
     }
 
@@ -475,7 +513,6 @@ impl<'src> Compiler<'src> {
     fn resolve_upvalue(&mut self, name: &Token) -> Option<(usize, bool)> {
         // we are currently in the outer most compiler
         let enclosing = self.enclosing.as_mut()?;
-          
 
         // reucursive call to search all the way back to the outermost compiler.
         let local: Option<(usize, bool)> = enclosing.resolve_local(name);
@@ -1068,6 +1105,10 @@ static RULES: [ParseRule; 40] = {
         Precedence::Term,
     );
 
+    rules[(Kind::Dot) as usize] = ParseRule::new_infix(
+        |compiler, can_assign| compiler.dot(can_assign),
+        Precedence::Call,
+    );
     rules[(Kind::Plus as u8) as usize] =
         ParseRule::new_infix(|compiler, _| compiler.binary(), Precedence::Term);
     rules[(Kind::Slash as u8) as usize] =

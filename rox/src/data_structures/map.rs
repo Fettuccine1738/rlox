@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 /// K: SymbolU32 is the interned string id, the Value::String(SymbolU32)
 /// already carries required information, no need duplicating the interened String again.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HashTable {
     /// Vec<Option<Entry>> is used here for open addressing, i.e (find the next empty spot when keys collide)
     /// Some = occupied,
@@ -14,7 +14,7 @@ pub struct HashTable {
     pub len: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Entry<K: Debug + Clone, V: Debug + Clone> {
     key: K,
     value: V,
@@ -118,7 +118,6 @@ impl HashTable {
                 _ => index = (index + 1) % len,
             }
 
-            // probe sequence.
             if index == start {
                 return ProbeResult::Full;
             }
@@ -203,8 +202,8 @@ impl HashTable {
     }
 
     pub fn contains_key(&self, key: SymbolU32) -> bool {
-        matches!(self.get_key_index(key), ProbeResult::Found(_)) 
-   }
+        matches!(self.get_key_index(key), ProbeResult::Found(_))
+    }
 }
 
 // holds iterator state.

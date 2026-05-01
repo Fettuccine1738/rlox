@@ -1,5 +1,6 @@
 #![allow(unused)]
 use std::fmt::Display;
+use std::hash::Hash;
 use std::rc::Rc;
 
 use crate::core::value::ObjId;
@@ -12,6 +13,7 @@ use crate::runtime::lang::Function;
 use crate::runtime::vm::VM;
 
 use rlox_gc_derive::Trace;
+use string_interner::symbol::SymbolU32;
 
 /// Next threshold that triggers gc collection
 const GC_THRESHOLD: usize = 1024 * 1024;
@@ -30,14 +32,82 @@ impl GcObject {
             is_marked: false,
         }
     }
+
+    pub fn is_instance(&self) -> bool {
+        matches!(self.value, GcValue::Instance(_))
+    }
+
+    pub fn is_closure(&self) -> bool {
+        matches!(self.value, GcValue::Closure(_))
+    }
+
+    pub fn is_class(&self) -> bool {
+        matches!(self.value, GcValue::Class(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct LoxInstance;
-#[derive(Debug, Clone, Copy)]
 pub struct BoundMethod;
-#[derive(Debug, Clone, Copy)]
-pub struct LoxClass;
+
+/// Classes : are how we create new instances, name required to get instance
+/// contain methods: behavior of Instances
+#[derive(Debug, Clone)]
+pub struct LoxClass {
+    name: String, // we can use LoxString here but this is easier
+}
+
+impl LoxClass {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
+/// From the user’s perspective, an instance of Cake is a different
+/// type of object than an instance of Pie. But, from the VM’s
+/// perspective, every class the user defines is simply another
+/// value of type ObjClass. Likewise, each instance in the user’s
+/// program, no matter what class it is an instance of, is an ObjInstance.
+#[derive(Debug, Clone)]
+pub struct LoxInstance {
+    class: ObjId,
+    fields: HashTable,
+}
+
+impl LoxInstance {
+    pub fn new(clazz: ObjId) -> Self {
+        // TODO: the fields of an instance are already interned and always
+        // return a compact 32 bit symbol. can we use this symbol to index a vec!
+        // instead of an hashtable?
+        // LIMITATIONS:
+        // Hashtable may rehash so there may be a small cost to pay on misses.
+        // The symbol are not aligned for access. i.e
+        // interner{`Foo`(sybmol = 1),`Bar` (symbol = 2)}  ;; using Bar to index here
+        // would mean our first field is Symbol(2), ideally we want to have
+        // Symbol(0) as the first.
+        Self {
+            class: clazz,
+            fields: HashTable::new(),
+        }
+    }
+
+    pub fn get_field(&self, property: SymbolU32) -> Option<Value> {
+        self.fields.get(property)
+    }
+
+    /// setter implicitly creates the field if it does not exist
+    /// therefore guaranteed to always succeed.
+    pub fn set_field(&mut self, key: SymbolU32, value: Value) {
+        let _ = self.fields.insert(key, value);
+    }
+}
+
+impl Trace for LoxInstance {
+    fn trace(&self, heap: &mut super::heap::Heap) {
+        heap.mark_object(self.class);
+        heap.mark_table(&self.fields);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LoxClosure {
     pub function: Rc<Function>,
@@ -86,7 +156,7 @@ pub enum GcValue {
     Instance(LoxInstance),
     #[unsafe_ignore_trace]
     BoundMethod(BoundMethod),
-    #[unsafe_ignore_trace]
+    #[unsafe_ignore_trace] // classes are static and should not be collected.
     Class(LoxClass),
     Closure(LoxClosure),
     #[unsafe_ignore_trace]
@@ -190,9 +260,7 @@ impl Heap {
     }
 
     fn is_marked(&mut self, id: ObjId) -> bool {
-        self.objects[id.0]
-            .as_ref()
-            .is_some_and(|obj| obj.is_marked)
+        self.objects[id.0].as_ref().is_some_and(|obj| obj.is_marked)
     }
 
     fn set_marked(&mut self, id: ObjId, marked: bool) {
@@ -205,17 +273,15 @@ impl Heap {
         if self.bytes_allocated > self.next_gc {
             self.collect_garbage();
         }
-        let mut size = 0;
+        let size = std::mem::size_of::<GcObject>();
         let mut id: usize = 0;
         // Look for an empty slot first (from a previous sweep)
         if let Some(slot) = self.objects.iter().position(|s| s.is_none()) {
             self.objects[slot] = Some(object);
-            size = std::mem::size_of::<GcObject>();
             id = slot;
         } else {
             // No free slots, grow the vec
             self.objects.push(Some(object));
-            size = std::mem::size_of::<GcObject>();
             id = self.objects.len() - 1;
         }
 

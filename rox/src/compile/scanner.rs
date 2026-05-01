@@ -164,8 +164,7 @@ impl<'src> Scanner<'src> {
     }
 
     fn match_next_char(&mut self, expect: char) -> bool {
-        if self.is_at_end() ||
-         expect != (self.source.as_bytes()[self.current] as char) {
+        if self.is_at_end() || expect != (self.source.as_bytes()[self.current] as char) {
             false
         } else {
             self.current += 1;

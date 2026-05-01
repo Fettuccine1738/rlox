@@ -19,14 +19,20 @@ pub enum GcMode {
 
 impl GcMode {
     pub fn start(&self) {
-        if let Self::Log = self { println!("{:-^15}", "gc_begin") }
+        if let Self::Log = self {
+            println!("{:-^15}", "gc_begin")
+        }
     }
 
     pub fn end(&self) {
-        if let Self::Log = self { println!("{:-^15}", "gc_end") }
+        if let Self::Log = self {
+            println!("{:-^15}", "gc_end")
+        }
     }
 
     pub fn info(&self, info: &str) {
-        if let Self::Log = self { println!("{}", info) }
+        if let Self::Log = self {
+            println!("{}", info)
+        }
     }
 }

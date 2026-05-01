@@ -142,21 +142,15 @@ pub mod strings {
         match (&args[start], &args[start + 1]) {
             (Value::String(s_1), Value::String(s_2)) => {
                 match (interner::get_string(*s_1), interner::get_string(*s_2)) {
-                    (Some(sl), Some(sr)) => {
-                        Ok(Value::Number((sl.cmp(&sr) as i8) as f64))
-                    }
-                    _ => {
-                        Err(VmError::Native(
-                            "One of the Strings passed in does not exist.".to_string(),
-                        ))
-                    }
+                    (Some(sl), Some(sr)) => Ok(Value::Number((sl.cmp(&sr) as i8) as f64)),
+                    _ => Err(VmError::Native(
+                        "One of the Strings passed in does not exist.".to_string(),
+                    )),
                 }
             }
-            _ => {
-                Err(VmError::Native(
-                    "string compare expected type of Strings.".to_string(),
-                ))
-            }
+            _ => Err(VmError::Native(
+                "string compare expected type of Strings.".to_string(),
+            )),
         }
     }
 }

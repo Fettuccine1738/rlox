@@ -93,6 +93,9 @@ impl Chunk {
                 println!(" RETURN");
                 offset + 1
             }
+            OpCode::Class => chunk.constant_instruction("OP_CLASS", offset),
+            OpCode::GetProperty => chunk.constant_instruction("OP_GET_PROPERTY", offset),
+            OpCode::SetProperty => chunk.constant_instruction("OP_SET_PROPERTY", offset),
             OpCode::Constant => {
                 let index = chunk.read_constant(offset);
                 println!("  OP_CONSTANT\t{}\t{}", index, chunk.constants[index]);
@@ -221,7 +224,9 @@ impl Chunk {
         let index = self.code[offset + 1]; // index of value is embeded in the bytecode stream.
 
         #[cfg(any(test, debug_assertions))]
-        if let Value::String(id) = self.constants[index as usize] { println!("{}", interner::get_string(id).unwrap()) }
+        if let Value::String(id) = self.constants[index as usize] {
+            println!("{}", interner::get_string(id).unwrap())
+        }
 
         offset + 2 // consume current bytecode and operand index.
     }

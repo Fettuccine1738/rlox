@@ -245,4 +245,38 @@ pub mod test {
         let mut vm = VM::new();
         assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     }
+
+    #[test]
+    fn test_simple_class_impl() {
+        let _src = "
+                        class Brioche {}
+                        print Brioche;
+                     ";
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+    }
+
+    #[test]
+    fn tests_instance_set_field_ok() {
+        let _src = "
+                        class Brioche {}
+                        var b = Brioche();
+                        b.jam = \"grape\";
+                        print b.jam;
+                     ";
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+    }
+
+    // NOTE: in cases where the class name is already defined
+    // No error is thrown. Fix this.
+    #[test]
+    fn tests_instance_get_field_ok() {
+        let _src = "
+                        class Pair {}
+                        var p = Pair();
+                        p.first = 1;
+                        p.second = 2;
+                        print p.first + p.second;
+                     ";
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+    }
 }

@@ -14,7 +14,9 @@ use crate::core::value::{NativeFn, ObjId, Value};
 use crate::data_structures::interner::{self};
 use crate::data_structures::map::HashTable;
 use crate::runtime::gc::Trace;
-use crate::runtime::heap::{GcObject, GcValue, Heap, LoxClosure, UpValueState};
+use crate::runtime::heap::{
+    GcObject, GcValue, Heap, LoxClass, LoxClosure, LoxInstance, UpValueState,
+};
 use crate::runtime::lang::CallFrame;
 use crate::runtime::lang::Function;
 use crate::std::{io, math, strings, time};
@@ -335,7 +337,7 @@ impl VM {
                     let mut upval_ids = vec![ObjId(0); count];
 
                     for item in upval_ids.iter_mut().take(count) {
-                    // for i in 0..count {
+                        // for i in 0..count {
                         // encoding [is_long (0 | 1)][(is_long == 0) ? idx_1b : idx_3b][is_local]
                         let is_long = self.read_byte();
                         let index = if is_long == 1 {
@@ -388,7 +390,65 @@ impl VM {
                     self.close_upvalues(slot);
                     self.stack.pop();
                 }
-                _ => todo!(),
+                OpCode::Class => {
+                    let name = interner::get_string(self.read_string().unwrap()).unwrap();
+                    let clazz = GcObject::new(GcValue::Class(LoxClass::new(name)));
+                    let id = self.heap.alloc(clazz);
+                    self.stack.push(Value::Object(id));
+                }
+                OpCode::GetProperty => {
+                    if let Value::Object(id) = self.peek(0) {
+                        // let instance: &GcObject = self.heap.get(id);
+                        // if !instance.is_instance() {
+                        //     self.runtime_error("Only instances have properties");
+                        //     return InterpretResult::RuntimeError;
+                        // }
+
+                        // again, dribble to bypass big BC!!
+                        let property: SymbolU32 = self.read_string().unwrap();
+                        let field = interner::get_string(property).unwrap();
+
+                        if let GcValue::Instance(li) = &self.heap.get(id).value {
+                            if let Some(value) = li.get_field(property) {
+                                // pop instance off the stack and replace with the gotten field
+                                self.stack.pop();
+                                self.push_value(value);
+                            } else {
+                                let msg = format!("Undefined property access `{}`.", field);
+                                self.runtime_error(&msg);
+                                return InterpretResult::RuntimeError;
+                            }
+                        } else {
+                            self.runtime_error("Only instances have properties");
+                            return InterpretResult::RuntimeError;
+                        }
+                    } else {
+                        self.runtime_error("Only instances have properties");
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+                OpCode::SetProperty => {
+                    if let Value::Object(id) = self.peek(1) {
+                        // NOTE: how we are looking at depth 1, because 0 is the field
+                        let field: SymbolU32 = self.read_string().unwrap();
+                        let v = self.peek(0);
+
+                        if let GcValue::Instance(li) = &mut self.heap.get_mut(id).value {
+                            li.set_field(field, v);
+                            // set property is an expression, so we leave the value on the stack but
+                            // remove the instance
+                            let val = self.pop().unwrap();
+                            let _ = self.pop(); // remove settee
+                            self.push_value(val); // push setter
+                        } else {
+                            self.runtime_error("Only instances have properties");
+                            return InterpretResult::RuntimeError;
+                        }
+                    } else {
+                        self.runtime_error("Only instances have properties");
+                        return InterpretResult::RuntimeError;
+                    }
+                }
             }
         }
     }
@@ -445,6 +505,11 @@ impl VM {
                     if let GcValue::Closure(clojure) = object {
                         let function: Rc<Function> = clojure.function.clone();
                         return self.call(&function, *id, arity);
+                    } else if let GcValue::Class(_) = object {
+                        let instance = LoxInstance::new(*id);
+                        let new_obj = self.heap.alloc(GcObject::new(GcValue::Instance(instance)));
+                        self.stack.push(Value::Object(new_obj)); // store reference on the stack
+                        true
                     } else {
                         false
                     }

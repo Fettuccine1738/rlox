@@ -20,3 +20,5 @@ current heuristic is error-prone but works.
 
 - (TODO): Fix test/test_unnamed_variable_fails_compile. This tests should return a Compile error 
 in cases (foo = 8; // foo is never declared with keyword `var`) but instead it panics.
+
+- TODO: add constant support for Instances

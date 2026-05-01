@@ -36,6 +36,9 @@ pub enum OpCode {
     GetUpValue = 28,
     SetUpValue = 29,
     CloseUpValue = 30,
+    Class = 31,
+    GetProperty = 32,
+    SetProperty = 33,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -89,6 +92,9 @@ impl TryFrom<u8> for OpCode {
             28 => Ok(Self::GetUpValue),
             29 => Ok(Self::SetUpValue),
             30 => Ok(Self::CloseUpValue),
+            31 => Ok(Self::Class),
+            32 => Ok(Self::GetProperty),
+            33 => Ok(Self::SetProperty),
             _ => Err(()),
         }
     }
