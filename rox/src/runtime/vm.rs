@@ -398,12 +398,6 @@ impl VM {
                 }
                 OpCode::GetProperty => {
                     if let Value::Object(id) = self.peek(0) {
-                        // let instance: &GcObject = self.heap.get(id);
-                        // if !instance.is_instance() {
-                        //     self.runtime_error("Only instances have properties");
-                        //     return InterpretResult::RuntimeError;
-                        // }
-
                         // again, dribble to bypass big BC!!
                         let property: SymbolU32 = self.read_string().unwrap();
                         let field = interner::get_string(property).unwrap();
