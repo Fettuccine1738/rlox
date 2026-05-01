@@ -39,6 +39,7 @@ pub enum OpCode {
     Class = 31,
     GetProperty = 32,
     SetProperty = 33,
+    Method = 34,
     // Design choice on why OpCodes for !=, <=, >= are not implemented.
     // the bytecode instructions does not need to follow closely to the user's
     // source code. The VM has total freedom to use whatever instruction set and code sequence
@@ -95,6 +96,7 @@ impl TryFrom<u8> for OpCode {
             31 => Ok(Self::Class),
             32 => Ok(Self::GetProperty),
             33 => Ok(Self::SetProperty),
+            34 => Ok(Self::Method),
             _ => Err(()),
         }
     }

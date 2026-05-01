@@ -1,4 +1,5 @@
 #![allow(unused)]
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -53,12 +54,16 @@ pub struct BoundMethod;
 /// contain methods: behavior of Instances
 #[derive(Debug, Clone)]
 pub struct LoxClass {
-    name: String, // we can use LoxString here but this is easier
+    name: String,       // we can use LoxString here but this is easier
+    methods: HashTable, // HashMap<SymbolU32, Function>
 }
 
 impl LoxClass {
     pub fn new(name: String) -> Self {
-        Self { name }
+        Self {
+            name,
+            methods: HashTable::new(),
+        }
     }
 }
 
@@ -156,7 +161,10 @@ pub enum GcValue {
     Instance(LoxInstance),
     #[unsafe_ignore_trace]
     BoundMethod(BoundMethod),
-    #[unsafe_ignore_trace] // classes are static and should not be collected.
+    // we trace through Objects to get to a class, 
+    // if unreachable through any objects we collect the Class except  classes declared globally
+    // will surely not be collected because they are also declared in the global table.
+    #[unsafe_ignore_trace] 
     Class(LoxClass),
     Closure(LoxClosure),
     #[unsafe_ignore_trace]

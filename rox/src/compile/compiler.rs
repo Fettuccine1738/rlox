@@ -276,21 +276,38 @@ impl<'src> Compiler<'src> {
 
     fn class_declaration(&mut self) {
         self.consume(Kind::Identifier, "Expect class name");
-        let previous = self.parser.borrow().previous;
+        let class_tok = self.parser.borrow().previous;
         // weird thing we have to do so identifier_constant does not throw errors
-        let _ = interner::intern(previous.lexeme);
+        let _ = interner::intern(class_tok.lexeme);
         // name_idx is the index of its interned string name in the constants pool
         // this helps the runtime find the class name
-        let name_idx = self.identifier_constant(previous);
+        let name_idx = self.identifier_constant(class_tok);
         self.declare_variable(true);
         self.emit_opcode_operand(OpCode::Class, name_idx);
         // the class name (agin index in constant pool) is used to bind
         // instruction to create class object at runtime, takes the constant
         // table index of the class's name as an operand
         self.define_variable(name_idx, true);
+        self.named_variable(class_tok, false);
 
         self.consume(Kind::LeftBrace, "Expect `{` before class body.");
+        loop {
+            if self.check(Kind::RightBrace) || self.check(Kind::EOF) {
+                break;
+            }
+            self.method();
+        }
         self.consume(Kind::RightBrace, "Expect `}` after class body.");
+        self.emit_opcode(OpCode::Pop);
+    }
+
+    fn method(&mut self) {
+        self.consume(Kind::Identifier, "Expect method name.");
+        let previous = self.parser.borrow().previous;
+        let _ = interner::intern(previous.lexeme);
+        let name = self.identifier_constant(previous);
+        self.function(FunctionType::Function);
+        self.emit_opcode_operand(OpCode::Method, name);
     }
 
     fn dot(&mut self, can_assign: bool) {
