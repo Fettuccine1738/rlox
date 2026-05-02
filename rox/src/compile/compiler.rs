@@ -1,6 +1,6 @@
 use std::cell::RefCell;
-use std::mem;
 use std::rc::Rc;
+use std::{mem, vec};
 
 use super::parser::Parser;
 use super::token::Kind;
@@ -15,9 +15,12 @@ pub const FUNCTION_ARG_MAX: u32 = 255;
 pub const LONG_UPVALUE_INDEX: u8 = 1; // index of a captured value sitting on slot > 255
 pub const SHORT_UPVALUE_INDEX: u8 = 0; // vice versa
 // dummy Parse Rule, required in cases where an error occured,
-// causing an unexpected TokenKind to be used to indexe the ParseRule table.
+// causing an unexpected TokenKind to be used to indexed the ParseRule table.
 // Compiler in some cases doesn't stop.
-pub static DEFAULT_PARSE_RULE: ParseRule = ParseRule::default();
+pub static DEFAULT_ERR_RULE: ParseRule = ParseRule::default();
+pub const INIT_KEYWORD: &str = "init"; // for constructors e.g `java` Foo(bar, baz) {}
+pub const THIS_KEYWORD: &str = "this";
+pub const SUPER_KEYWORD: &str = "super";
 
 #[derive(Debug, Default)]
 pub struct Local<'src> {
@@ -46,10 +49,10 @@ impl Local<'_> {
     }
 }
 
-type ClassNode = Option<Box<ClassCompiler>>;
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ClassCompiler {
-    enclosing: ClassNode,
+pub(crate) struct ClassCompiler<'src> {
+    token: Token<'src>,
+    has_super: bool,
 }
 
 /// index stores which local slot the upvalue is capturing.
@@ -80,7 +83,7 @@ pub struct Compiler<'src> {
     function_type: FunctionType,
     enclosing: Option<Box<Compiler<'src>>>,
     upvalues: Vec<UpValue>,
-    cur_class: ClassNode,
+    class_stack: Rc<RefCell<Vec<ClassCompiler<'src>>>>,
 }
 
 impl<'src> Compiler<'src> {
@@ -102,7 +105,7 @@ impl<'src> Compiler<'src> {
             function_type: FunctionType::default(),
             enclosing: None,
             upvalues: vec![],
-            cur_class: None,
+            class_stack: Rc::new(RefCell::new(vec![])),
         };
 
         // we need this for alignment, the function then looks for params/ args starting from index 1.
@@ -154,7 +157,11 @@ impl<'src> Compiler<'src> {
     }
 
     fn emit_return(&mut self) {
-        self.emit_opcode(OpCode::NIL);
+        if self.function_type == FunctionType::Init {
+            self.emit_opcode_operand(OpCode::GetLocal, 0);
+        } else {
+            self.emit_opcode(OpCode::NIL);
+        }
         self.emit_opcode(OpCode::Return);
     }
 
@@ -217,22 +224,23 @@ impl<'src> Compiler<'src> {
 
     fn end_compilation(&mut self) -> Rc<Function> {
         self.emit_return();
-        #[cfg(any(test, debug_assertions))] // analogous to a #ifdef block in C
-        // custom features could be used too. #[cfg(feature="")]
-        // println!("{:?}", self.function);
+        #[cfg(feature = "")] // #[cfg(feature="")] // custom features
+        // #[cfg(any(test, feature=""))] // analogous to a #ifdef block in C
         let name = self
             .function
             .name
             .as_deref()
             .unwrap_or("Script")
             .to_string();
+        #[cfg(feature = "")]
         let status = if self.parser.borrow().had_error {
             "Failed to Compile"
         } else {
             "Compile successful"
         };
+        #[cfg(feature = "")]
         let display_string = format!("{}  :  {}", name, status);
-
+        #[cfg(feature = "")]
         Chunk::disassemble(self.current_chunk(), &display_string);
 
         let function = std::mem::take(&mut self.function);
@@ -276,6 +284,11 @@ impl<'src> Compiler<'src> {
             // if there is no return value, implictly return NIL
             self.emit_return();
         } else {
+            if self.function_type == FunctionType::Init {
+                self.parser
+                    .borrow_mut()
+                    .error("Can't return a value from an initializer")
+            }
             self.expression();
             self.consume(Kind::SemiColon, "Expect ';' after return value.");
             self.emit_opcode(OpCode::Return);
@@ -296,10 +309,38 @@ impl<'src> Compiler<'src> {
         // instruction to create class object at runtime, takes the constant
         // table index of the class's name as an operand
         self.define_variable(name_idx, true);
-        let class_cmp = ClassCompiler {
-            enclosing: self.cur_class.clone(),
-        };
-        self.cur_class = Some(Box::new(class_cmp));
+        self.class_stack.borrow_mut().push(ClassCompiler {
+            token: class_tok,
+            has_super: false,
+        });
+
+        // to please the borrow checker 
+        let mut  has_super = false;
+
+        if self.match_token(Kind::Less) {
+            self.consume(Kind::Identifier, "Expect superclass name");
+            self.variable(false); // emit code to load the superclass 
+            let super_tok = self.parser.borrow().previous;
+            if class_tok.lexeme == super_tok.lexeme {
+                self.parser
+                    .borrow_mut()
+                    .error("A class can't inherit from itself");
+            }
+            self.begin_scope();
+            self.add_local(Token::synthetic(SUPER_KEYWORD, super_tok.line), true);
+            self.define_variable(0, true);
+
+            // BUGBUG: the super keyword is supposed to be defined here but it isn't
+            // because  it is not being defined, the compiler thinks we are trying to read its own
+            // variable which is a bug itself, class should be declared globally if we are not inside
+            // a class.
+            self.named_variable(class_tok, false); // load the subclass
+            self.emit_opcode(OpCode::Inherit); // connect sub to super
+            if let Some(c) = self.class_stack.borrow_mut().last_mut() {
+                c.has_super = true;
+                has_super = true;
+            };
+        }
         // loads the class back on top of the stack
         self.named_variable(class_tok, false);
 
@@ -312,22 +353,62 @@ impl<'src> Compiler<'src> {
         }
         self.consume(Kind::RightBrace, "Expect `}` after class body.");
         self.emit_opcode(OpCode::Pop);
-        // restore enclosing state for compiling classes
-        let class_cmp = *self.cur_class.as_ref().unwrap().to_owned();
-        self.cur_class = class_cmp.enclosing;
+        if has_super {
+            self.end_scope();
+        };
+
+        self.class_stack.borrow_mut().pop();
     }
 
     fn method(&mut self) {
         self.consume(Kind::Identifier, "Expect method name.");
         let previous = self.parser.borrow().previous;
+        let ft = if previous.lexeme.eq(INIT_KEYWORD) {
+            FunctionType::Init
+        } else {
+            FunctionType::Method
+        };
         let _ = interner::intern(previous.lexeme);
+
         let name = self.identifier_constant(previous);
-        self.function(FunctionType::Method);
+        self.function(ft);
         self.emit_opcode_operand(OpCode::Method, name);
     }
 
+    fn super_(&mut self) {
+        if self.class_stack.borrow().is_empty() {
+            self.parser
+                .borrow_mut()
+                .error("can't use `super` outside of a class.");
+        } else if let Some(c) = self.class_stack.borrow().last()
+            && !c.has_super
+        {
+            self.parser
+                .borrow_mut()
+                .error("can't use `super` with no superclass.");
+        }
+
+        self.consume(Kind::Dot, "Expect `.` after `super`.");
+        self.consume(Kind::Identifier, "Expect superclass method name");
+        // method name
+        let prev = self.parser.borrow().previous;
+        let name_idx = self.identifier_constant(prev);
+
+        // use receiver and superclass to access the method at runtime
+        self.named_variable(Token::synthetic(THIS_KEYWORD, prev.line), false);
+        if self.match_token(Kind::LeftParen) {
+            let arg_count = self.argument_list();
+            self.named_variable(Token::synthetic(SUPER_KEYWORD, prev.line), false);
+            self.emit_opcode_operand(OpCode::SuperInvoke, name_idx);
+            self.emit_byte(arg_count as u8);
+        } else {
+            self.named_variable(Token::synthetic(SUPER_KEYWORD, prev.line), false);
+            self.emit_opcode_operand(OpCode::GetSuper, name_idx);
+        }
+    }
+
     fn this(&mut self) {
-        if self.cur_class.is_none() {
+        if self.class_stack.borrow().is_empty() {
             self.parser
                 .borrow_mut()
                 .error("Cannot use `this` outside of a class");
@@ -347,6 +428,10 @@ impl<'src> Compiler<'src> {
         if can_assign && self.match_token(Kind::Equal) {
             self.expression();
             self.emit_opcode_operand(OpCode::SetProperty, name);
+        } else if self.match_token(Kind::LeftParen) {
+            let arg_count = self.argument_list();
+            self.emit_opcode_operand(OpCode::Invoke, name);
+            self.emit_byte(arg_count as u8);
         } else {
             self.emit_opcode_operand(OpCode::GetProperty, name);
         }
@@ -378,9 +463,7 @@ impl<'src> Compiler<'src> {
             const_globals: Vec::new(),
             function: Function::new(),
             function_type: func_type,
-            cur_class: Some(Box::new(ClassCompiler {
-                enclosing: enclosing.cur_class.clone(),
-            })),
+            class_stack: enclosing.class_stack.clone(),
             enclosing: Some(Box::new(enclosing)),
             upvalues: vec![],
         };
@@ -399,7 +482,7 @@ impl<'src> Compiler<'src> {
         let this = if func_type != FunctionType::Function {
             Token {
                 kind: Kind::Identifier,
-                lexeme: "this",
+                lexeme: THIS_KEYWORD,
                 line: 0,
             }
         } else {
@@ -1061,7 +1144,7 @@ impl<'src> Compiler<'src> {
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
         match RULES.get(kind as usize) {
             Some(rule) => rule,
-            None => &DEFAULT_PARSE_RULE,
+            None => &DEFAULT_ERR_RULE,
         }
     }
 }
@@ -1171,6 +1254,9 @@ static RULES: [ParseRule; 40] = {
     );
     rules[(Kind::This) as usize] =
         ParseRule::new_prefix(|compiler, _| compiler.this(), Precedence::None);
+
+    rules[(Kind::Super) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.super_(), Precedence::None);
     rules[(Kind::Dot) as usize] = ParseRule::new_infix(
         |compiler, can_assign| compiler.dot(can_assign),
         Precedence::Call,

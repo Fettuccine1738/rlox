@@ -62,6 +62,7 @@ impl Chunk {
         self.write(op_code as u8, line);
     }
 
+    #[cfg(feature = "")]
     pub fn disassemble(chunk: &Chunk, name: &str) {
         println!("====={name}=====");
         let mut i = 0usize;
@@ -187,6 +188,10 @@ impl Chunk {
             OpCode::GetUpValue => chunk.byte_instruction("OP_GET_UPVALUE", offset, false), // operand is code pool
             OpCode::SetUpValue => chunk.byte_instruction("OP_SET_UPVALUE", offset, false), // also here
             OpCode::CloseUpValue => Self::simple_instruction("OP_CLOSE_VALUE", offset),
+            OpCode::Invoke => chunk.invoke_instruction("OP_INVOKE", offset),
+            OpCode::Inherit => Self::simple_instruction("OP_INHERIT", offset),
+            OpCode::GetSuper => chunk.constant_instruction("OP_GET_SUPER", offset),
+            OpCode::SuperInvoke => chunk.invoke_instruction("OP_SUPER_INVOKE", offset),
         }
     }
 
@@ -217,6 +222,26 @@ impl Chunk {
         print!("   {name}\t");
         println!("{offset:4} {}", (offset as i32 + 3 + sign * jump as i32));
         offset + 3
+    }
+
+    fn invoke_instruction(&self, name: &str, offset: usize) -> usize {
+        let constant = self.code[offset + 1]; // name 
+        if let Value::String(s) = self.constants[constant as usize] {
+            let arg_count = self.code[offset + 2]; // name 
+            let info = format!(
+                "{:^16} ({:4} args) {:4}",
+                name,
+                arg_count,
+                interner::get_string(s).unwrap(),
+            );
+            println!("{info}");
+            offset + 3
+        } else {
+            panic!(
+                "Expected to find method name but found {}",
+                self.constants[constant as usize]
+            );
+        }
     }
 
     // TODO: fix this, compare with impl in the book!

@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
+use string_interner::Symbol;
 use string_interner::symbol::{self, SymbolU32};
 
 use crate::compile::compiler::Compiler;
@@ -21,9 +22,10 @@ use crate::runtime::lang::CallFrame;
 use crate::runtime::lang::Function;
 use crate::std::{io, math, strings, time};
 
-pub const DEBUG_TRACE: bool = true;
+pub const DEBUG_TRACE: bool = false;
 pub const FRAMES_MAX: usize = 64;
 pub const STACK_MAX: usize = 256; // update to FRAMES_MAX * UINT8_COUNT
+pub const INIT: &str = "init"; // update to FRAMES_MAX * UINT8_COUNT
 
 #[derive(Debug, PartialEq)]
 #[repr(u8)]
@@ -41,7 +43,8 @@ pub struct VM {
     // retain a reference  to its one new location. That way when th variable is mutated
     // all closures see the change.
     pub open_upvalues: HashMap<usize, ObjId>,
-    heap: Heap, // dummy: *mut * mut Value
+    heap: Heap,             // dummy: *mut * mut Value
+    init_symbol: SymbolU32, // `this` keyword
 }
 
 impl Trace for VM {
@@ -68,7 +71,8 @@ impl VM {
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
             open_upvalues: HashMap::new(),
-            heap: Heap::new(Default::default()),
+            heap: Heap::new(super::gc::GcMode::Stress),
+            init_symbol: interner::intern(INIT),
         }
     }
 
@@ -80,6 +84,7 @@ impl VM {
         match Compiler::compile(&source) {
             None => InterpretResult::CompileError,
             Some(func) => {
+                #[cfg(feature = "")]
                 println!("{}", func.chunk);
                 self.define_native("io::readNumber".to_owned(), NativeFn(io::read_number));
                 self.define_native("io::readLine".to_owned(), NativeFn(io::read_line));
@@ -147,7 +152,7 @@ impl VM {
     }
 
     fn run(&mut self) -> InterpretResult {
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "")]
         if DEBUG_TRACE {
             for v in &self.stack {
                 if let Value::Object(id) = v {
@@ -159,7 +164,7 @@ impl VM {
         }
 
         loop {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "")]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
                 Chunk::disassemble_instruction(self.current_chunk(), start);
@@ -169,7 +174,6 @@ impl VM {
             // when explicitly borrowed let s = last();
             // self.get_current_frame_mut().ip += 1; // point to the next instruction to read.
             let instruction: OpCode = OpCode::try_from(self.read_byte()).expect("");
-            // println!("debuging {}", instruction);
 
             match instruction {
                 OpCode::Return => {
@@ -189,9 +193,16 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                OpCode::Invoke => {
+                    let name = self.read_string().unwrap();
+                    let arg_count = self.read_byte();
+                    if !self.invoke(name, arg_count) {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
                 OpCode::Constant => {
                     let constant: Value = self.read_constant();
-                    self.stack.push(constant); // self.push_value(constant)
+                    self.stack.push(constant);
                 }
                 OpCode::Constant24 => {
                     let constant: Value = self.read_constant();
@@ -245,8 +256,6 @@ impl VM {
                     let value = self.stack.pop().unwrap();
                     println!("{}", value);
                 }
-                // used for expression stmts to evaluate an expression and
-                // discard the result.
                 OpCode::Pop => {
                     let _ = self.stack.pop();
                 }
@@ -256,7 +265,7 @@ impl VM {
                     self.stack.truncate(n as usize);
                 }
                 OpCode::DefineGlobal => {
-                    // used to strore the global Variable and Value pairs.
+                    // used to store the global Variable and Value pairs.
                     let name = self.read_string().unwrap();
                     // NOTE: Value is not popped directly off the stack.
                     // This is to ensure that the VM can still find the value after/during garbage collection.b
@@ -266,7 +275,6 @@ impl VM {
                 }
                 OpCode::GetGlobal => {
                     let name = self.read_string().unwrap();
-                    // here is the actual value associated with this variable name.
                     let value: Value = match self.globals.get(name) {
                         Some(value) => value,
                         None => return InterpretResult::RuntimeError,
@@ -452,6 +460,39 @@ impl VM {
                     let name = self.read_string().unwrap();
                     self.define_method(name);
                 }
+                OpCode::Inherit => {
+                    if let Value::Object(super_id) = self.peek(1) {
+                        // clox checks at here if a super is a class but we defer it to the heap
+                        if let Value::Object(sub_id) = self.peek(0) {
+                            // the subclass at this point is empty, so when the subclass's methods
+                            // are added, overwritten methods shadow the superclass's methods.
+                            if !self.heap.orchestrate_inherit(super_id, sub_id) {
+                                self.runtime_error("Superclass must be a class.");
+                            }
+                            self.pop();
+                        }
+                    } else {
+                        self.runtime_error("Superclass must be a class.");
+                    }
+                }
+                OpCode::GetSuper => {
+                    let name = self.read_string().unwrap();
+                    if let Value::Object(sup_id) = self.pop().unwrap()
+                        && !self.bind_method(sup_id, name)
+                    {
+                        return InterpretResult::RuntimeError;
+                    }
+                    // else method not required, compiler would have caught this error.
+                }
+                OpCode::SuperInvoke => {
+                    let name = self.read_string().unwrap();
+                    let arg_count = self.read_byte();
+                    if let Value::Object(sup_id) = self.pop().unwrap()
+                        && !self.invoke_from_class(sup_id, name, arg_count)
+                    {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
             }
         }
     }
@@ -459,7 +500,7 @@ impl VM {
     fn bind_method(&mut self, class: ObjId, name: SymbolU32) -> bool {
         if let GcValue::Class(clazz) = &self.heap.get(class).value {
             // again no need to get as closure, the call() function
-            // checks if the Object is either a Class,CLosure, Nativefn etc
+            // checks if the Object is either a Class, Closure or Nativefn etc
             clazz.get_method(name).is_some_and(|v| {
                 self.push_value(v);
                 true
@@ -471,7 +512,7 @@ impl VM {
     /// marks all roots with allocations on the heap
     /// as grey
     pub fn collect_garbage(&mut self) {
-        let roots = self.find_roots();
+        let roots: HashSet<ObjId> = self.find_roots();
         self.heap.mark_roots(roots.into_iter());
         self.heap.trace_references();
         self.heap.sweep();
@@ -499,11 +540,44 @@ impl VM {
         objects
     }
 
+    fn invoke(&mut self, name: SymbolU32, arg_count: u8) -> bool {
+        if let Value::Object(recv) = self.peek(arg_count as usize) {
+            if let GcValue::Instance(i) = &self.heap.get(recv).value {
+                if let Some(v) = i.get_field(name) {
+                    // replace instance on the stack with it gotten property
+                    let idx = self.stack.len() - arg_count as usize - 1;
+                    self.stack[idx] = v.clone(); // inexpensive bounded method call
+                    return self.call_value(v, arg_count);
+                } else {
+                    return self.invoke_from_class(i.class, name, arg_count);
+                }
+            } else {
+                self.runtime_error("Only instances have methods.");
+                return false;
+            }
+        }
+        false
+    }
+
+    fn invoke_from_class(&mut self, class_id: ObjId, name: SymbolU32, arg_count: u8) -> bool {
+        if let GcValue::Class(m) = &self.heap.get(class_id).value {
+            if let Some(Value::Object(cloj)) = m.get_method(name) {
+                let f = self.heap.get(cloj).as_function().unwrap();
+                // receiver and args alread on stack
+                return self.call(&f, cloj, arg_count);
+            } else {
+                let msg = format!("Undefined property {}", interner::get_string(name).unwrap());
+                self.runtime_error(&msg);
+            }
+        }
+        false
+    }
+
     fn call_value(&mut self, callee: Value, arity: u8) -> bool {
         if Value::is_object(&callee) {
             return match &callee {
                 Value::NativeFunction(func) => {
-                    let arg_start = self.stack.len() - arity as usize;
+                    let arg_start = self.stack.len() - arity as usize; // slot 0 irrelevant here, hence no -1
                     let args: &[Value] = &self.stack[arg_start..]; // send only the args the functions need
                     match (func.0)(arity as usize, args) {
                         Ok(result) => {
@@ -516,24 +590,38 @@ impl VM {
                     false
                 }
                 Value::Object(id) => {
-                    let object = &self.heap.get(*id).value;
-                    if let GcValue::Closure(clojure) = object {
-                        let function: Rc<Function> = clojure.function.clone();
-                        return self.call(&function, *id, arity);
-                    } else if let GcValue::Class(_) = object {
-                        let instance = LoxInstance::new(*id);
-                        let new_obj = self.heap.alloc(GcObject::new(GcValue::Instance(instance)));
-                        self.stack.push(Value::Object(new_obj)); // store reference on the stack
-                        true
-                    } else if let GcValue::Method(m) = object {
-                        let obj = self.heap.get(m.closure);
-                        let function = obj.as_function().unwrap();
-                        // place the instance(receiver) of this method where local 0 sits.
-                        let idx = self.stack.len() - arity as usize - 1;
-                        self.stack[idx] = Value::Object(m.receiver);
-                        return self.call(&function, m.closure, arity);
-                    } else {
-                        false
+                    match &self.heap.get(*id).value {
+                        GcValue::Closure(clojure) => {
+                            let function: Rc<Function> = clojure.function.clone();
+                            return self.call(&function, *id, arity);
+                        }
+                        GcValue::Class(klass) => {
+                            let constructor: Option<Value> = klass.get_method(self.init_symbol);
+                            let instance: LoxInstance = LoxInstance::new(*id);
+                            let new_obj: ObjId =
+                                self.heap.alloc(GcObject::new(GcValue::Instance(instance)));
+                            // store reference on the stack slot where local 0 would have been
+                            let idx = self.stack.len() - arity as usize - 1;
+                            self.stack[idx] = Value::Object(new_obj);
+                            if let Some(Value::Object(init_id)) = constructor {
+                                let function = self.heap.get(init_id).as_function().unwrap();
+                                return self.call(&function, init_id, arity);
+                            } else if arity != 0 {
+                                // when a no-args constructor is (implicitly) defined but constructor is called with args
+                                let msg = format!("Expected 0 arguments but got {}", arity);
+                                self.runtime_error(&msg);
+                            }
+                            true
+                        }
+                        GcValue::Method(m) => {
+                            let obj = self.heap.get(m.closure);
+                            let function = obj.as_function().unwrap();
+                            // place the instance(receiver) of this method where local 0 sits.
+                            let idx = self.stack.len() - arity as usize - 1;
+                            self.stack[idx] = Value::Object(m.receiver);
+                            return self.call(&function, m.closure, arity);
+                        }
+                        _ => false,
                     }
                 }
                 _ => false,

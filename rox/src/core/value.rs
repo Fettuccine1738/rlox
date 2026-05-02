@@ -154,7 +154,7 @@ impl Display for Value {
         match &self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
-            Value::Nil => write!(f, "nil"),
+            Value::Nil => write!(f, "[NIL]"),
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
                 write!(f, "{}", s)
@@ -190,6 +190,8 @@ impl Add for Value {
     fn add(self, other: Self) -> Self::Output {
         match (&self, &other) {
             (Value::Number(l), Value::Number(r)) => Some(Value::Number(l + r)),
+            (Value::Nil, _) => Some(Value::Nil), // allow obj + Nil instead of throwing error at runtime
+            (_, Value::Nil) => Some(Value::Nil),
             (Value::String(lhs), Value::String(rhs)) => {
                 let l_str = interner::get_string(*lhs);
                 let r_str = interner::get_string(*rhs);

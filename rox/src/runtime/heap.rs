@@ -1,4 +1,5 @@
 #![allow(unused)]
+use std::array;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -42,6 +43,15 @@ impl GcObject {
         None
     }
 
+    // WARNING: always clone the GcOBject before use, because we consume
+    // its value
+    pub fn as_class(self) -> Option<LoxClass> {
+        if let GcValue::Class(lc) = self.value {
+            return Some(lc);
+        }
+        None
+    }
+
     pub fn is_instance(&self) -> bool {
         matches!(self.value, GcValue::Instance(_))
     }
@@ -71,19 +81,18 @@ impl BoundMethod {
     }
 }
 
-// impl Display for BoundMethod {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         writeln!("lol");
-//     }
-// }
-
 /// Classes : are how we create new instances, name required to get instance
 /// contain methods: behavior of Instances
-/// TODO: derive / impl Trace
 #[derive(Debug, Clone)]
 pub struct LoxClass {
-    name: String,       // we can use LoxString here but this is easier
+    name: String,       // we can use LoxString here but this is easier for debugging
     methods: HashTable, // HashMap<SymbolU32, Function>
+}
+
+impl Trace for LoxClass {
+    fn trace(&self, heap: &mut super::heap::Heap) {
+        heap.mark_table(&self.methods);
+    }
 }
 
 impl LoxClass {
@@ -198,7 +207,6 @@ pub enum GcValue {
     // we trace through Objects to get to a class,
     // if unreachable through any objects we collect the Class except  classes declared globally
     // will surely not be collected because they are also declared in the global table.
-    #[unsafe_ignore_trace]
     Class(LoxClass),
     Closure(LoxClosure),
     #[unsafe_ignore_trace]
@@ -381,6 +389,19 @@ impl Heap {
             is_marked: false,
             value: GcValue::Closure(closure),
         })
+    }
+
+    pub fn orchestrate_inherit(&mut self, superclass: ObjId, subclass: ObjId) -> bool {
+        self.objects[superclass.0].clone().is_some_and(|obj| {
+            if let Some(supa) = obj.as_class()
+                && let GcValue::Class(sub) = &mut self.objects[subclass.0].as_mut().unwrap().value
+            {
+                sub.methods.add_all(supa.methods);
+                return true;
+            }
+            false
+        });
+        false
     }
 
     fn collect_garbage(&mut self) {

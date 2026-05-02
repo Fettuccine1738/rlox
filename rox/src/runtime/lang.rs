@@ -86,6 +86,7 @@ impl Function {
 #[repr(u8)]
 pub enum FunctionType {
     Function,
+    Init,
     Method,
     #[default]
     Script,

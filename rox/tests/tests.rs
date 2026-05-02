@@ -249,8 +249,20 @@ pub mod test {
     #[test]
     fn test_simple_class_impl() {
         let _src = "
-                        class Brioche {}
-                        print Brioche;
+                        class CoffeeMaker {
+                          init(coffee) {
+                            this.coffee = coffee;
+                          }
+
+                          brew() {
+                            print \"Enjoy your cup of \" + this.coffee;
+                            this.coffee = nil;
+                          }
+                        }
+
+                        var maker = CoffeeMaker(\"coffee and chicory\");
+                        maker.brew();
+                        maker.brew();
                      ";
         assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
     }
@@ -276,6 +288,32 @@ pub mod test {
                         p.first = 1;
                         p.second = 2;
                         print p.first + p.second;
+                     ";
+        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+    }
+
+    #[test]
+    fn tests_super_call_dispatch_ok() {
+        let _src = "
+            class A {
+              method() {
+                print \"A method\";
+              }
+            }
+
+            class B < A {
+              method() {
+                print \"B method\";
+              }
+
+              test() {
+                super.method();
+              }
+            }
+
+            class C < B {}
+
+            C().test();
                      ";
         assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
     }

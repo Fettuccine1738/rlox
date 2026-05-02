@@ -49,9 +49,9 @@ enum ProbeResult {
 //         .fold(2166136261u32, |hash, b| (hash ^ (b as u32)) * 16777619)
 // }
 
-pub fn fnv1_hash(key: SymbolU32) -> u32 {
-    let hash = 2166136261u32;
-    (hash ^ (key.to_usize() as u32)) * 16777619u32
+pub fn fnv1_hash(key: SymbolU32) -> usize {
+    let hash: usize = 2166136261;
+    (hash ^ (key.to_usize())) * 16777619usize
 }
 
 pub struct Iter<'a> {
@@ -109,7 +109,7 @@ impl HashTable {
         let len = self.entries.len();
         // NOTE: instead of hashing SymbolU32 are already unique.
         // we can use them as hashed ids of the strings interned.
-        let start: usize = key.to_usize() % len;
+        let start: usize = fnv1_hash(key) % len;
         let mut index = start;
         loop {
             match &self.entries[index] {
@@ -124,7 +124,7 @@ impl HashTable {
         }
     }
 
-    // returns true if no previous entry existed. i.e inserted new value.
+    // returns true if a new insert, false when updating a value
     pub fn insert(&mut self, key: SymbolU32, v: Value) -> bool {
         let entry = Some(Entry { key, value: v });
         if self.entries.is_empty() {
