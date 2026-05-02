@@ -19,6 +19,12 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub struct ObjId(pub usize);
 
+impl crate::runtime::gc::Trace for ObjId {
+    fn trace(&self, heap: &mut crate::runtime::heap::Heap) {
+        heap.mark_object(*self);
+    }
+}
+
 // stub struct
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Closure;

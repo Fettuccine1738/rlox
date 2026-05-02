@@ -82,10 +82,11 @@ impl Function {
     }
 }
 
-#[derive(Debug, Default, PartialEq, PartialOrd)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
 pub enum FunctionType {
     Function,
+    Method,
     #[default]
     Script,
 }

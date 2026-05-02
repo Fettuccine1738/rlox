@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
+use std::ops::Bound;
 use std::rc::Rc;
 
 use crate::core::value::ObjId;
@@ -34,6 +35,13 @@ impl GcObject {
         }
     }
 
+    pub fn as_function(&self) -> Option<Rc<Function>> {
+        if let GcValue::Closure(lc) = &self.value {
+            return Some(lc.function.clone());
+        }
+        None
+    }
+
     pub fn is_instance(&self) -> bool {
         matches!(self.value, GcValue::Instance(_))
     }
@@ -45,13 +53,33 @@ impl GcObject {
     pub fn is_class(&self) -> bool {
         matches!(self.value, GcValue::Class(_))
     }
+
+    pub fn is_method(&self) -> bool {
+        matches!(self.value, GcValue::Method(_))
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct BoundMethod;
+#[derive(Debug, Clone, Copy, Trace)]
+pub struct BoundMethod {
+    pub receiver: ObjId, // points to the LoxInstance
+    pub closure: ObjId,  //  points to the LoxClosure on the heap
+}
+
+impl BoundMethod {
+    pub fn new(receiver: ObjId, closure: ObjId) -> Self {
+        Self { receiver, closure }
+    }
+}
+
+// impl Display for BoundMethod {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         writeln!("lol");
+//     }
+// }
 
 /// Classes : are how we create new instances, name required to get instance
 /// contain methods: behavior of Instances
+/// TODO: derive / impl Trace
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     name: String,       // we can use LoxString here but this is easier
@@ -65,6 +93,14 @@ impl LoxClass {
             methods: HashTable::new(),
         }
     }
+
+    pub fn add_method(&mut self, name: SymbolU32, method: ObjId) {
+        let _ = self.methods.insert(name, Value::Object(method));
+    }
+
+    pub fn get_method(&self, name: SymbolU32) -> Option<Value> {
+        self.methods.get(name)
+    }
 }
 
 /// From the user’s perspective, an instance of Cake is a different
@@ -74,7 +110,7 @@ impl LoxClass {
 /// program, no matter what class it is an instance of, is an ObjInstance.
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
-    class: ObjId,
+    pub class: ObjId,
     fields: HashTable,
 }
 
@@ -157,14 +193,12 @@ pub enum UpValueState {
 
 #[derive(Debug, Clone, Trace)]
 pub enum GcValue {
-    #[unsafe_ignore_trace]
     Instance(LoxInstance),
-    #[unsafe_ignore_trace]
-    BoundMethod(BoundMethod),
-    // we trace through Objects to get to a class, 
+    Method(BoundMethod),
+    // we trace through Objects to get to a class,
     // if unreachable through any objects we collect the Class except  classes declared globally
     // will surely not be collected because they are also declared in the global table.
-    #[unsafe_ignore_trace] 
+    #[unsafe_ignore_trace]
     Class(LoxClass),
     Closure(LoxClosure),
     #[unsafe_ignore_trace]

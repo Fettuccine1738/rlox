@@ -5,7 +5,7 @@ use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
-use string_interner::symbol::SymbolU32;
+use string_interner::symbol::{self, SymbolU32};
 
 use crate::compile::compiler::Compiler;
 use crate::core::chunk::Chunk;
@@ -403,14 +403,19 @@ impl VM {
                         let field = interner::get_string(property).unwrap();
 
                         if let GcValue::Instance(li) = &self.heap.get(id).value {
+                            // fields have priority over and shadow methods, hence search first
                             if let Some(value) = li.get_field(property) {
                                 // pop instance off the stack and replace with the gotten field
                                 self.stack.pop();
                                 self.push_value(value);
                             } else {
-                                let msg = format!("Undefined property access `{}`.", field);
-                                self.runtime_error(&msg);
-                                return InterpretResult::RuntimeError;
+                                // if this instance does not have a field with the property name,
+                                // look for a method in its class.
+                                if !self.bind_method(li.class, property) {
+                                    let msg = format!("Undefined property access `{}`.", field);
+                                    self.runtime_error(&msg);
+                                    return InterpretResult::RuntimeError;
+                                }
                             }
                         } else {
                             self.runtime_error("Only instances have properties");
@@ -443,8 +448,24 @@ impl VM {
                         return InterpretResult::RuntimeError;
                     }
                 }
+                OpCode::Method => {
+                    let name = self.read_string().unwrap();
+                    self.define_method(name);
+                }
             }
         }
+    }
+
+    fn bind_method(&mut self, class: ObjId, name: SymbolU32) -> bool {
+        if let GcValue::Class(clazz) = &self.heap.get(class).value {
+            // again no need to get as closure, the call() function
+            // checks if the Object is either a Class,CLosure, Nativefn etc
+            clazz.get_method(name).is_some_and(|v| {
+                self.push_value(v);
+                true
+            });
+        }
+        false
     }
 
     /// marks all roots with allocations on the heap
@@ -504,6 +525,13 @@ impl VM {
                         let new_obj = self.heap.alloc(GcObject::new(GcValue::Instance(instance)));
                         self.stack.push(Value::Object(new_obj)); // store reference on the stack
                         true
+                    } else if let GcValue::Method(m) = object {
+                        let obj = self.heap.get(m.closure);
+                        let function = obj.as_function().unwrap();
+                        // place the instance(receiver) of this method where local 0 sits.
+                        let idx = self.stack.len() - arity as usize - 1;
+                        self.stack[idx] = Value::Object(m.receiver);
+                        return self.call(&function, m.closure, arity);
                     } else {
                         false
                     }
@@ -587,6 +615,31 @@ impl VM {
         self.pop();
     }
 
+    /// FIX: we already allocated the closure on the heap, ideally
+    /// the class should own the Closure / Function.
+    /// The objId adds a costly indirection. If a class sits directly above a Class
+    /// that hints we need to bind the method to the class and should defer allocation on the heap
+    fn define_method(&mut self, name: SymbolU32) {
+        // NOTE: Clox uses AS_CLASS(_) methods to check type at runtime
+        // If let helps us guard against wrong type use too.. Rust ftw
+        if let Value::Object(method_id) = self.peek(0) {
+            // method closure sitting on the stack
+            // must be a Value::Object()
+            // get heap object through reference on the stack
+            if let Value::Object(class_id) = self.peek(1)
+                && let GcValue::Class(class) = &mut self.heap.get_mut(class_id).value
+            {
+                class.add_method(name, method_id);
+                self.pop(); // remove method object sitting on the stack
+            }
+        } else {
+            let msg = format!("Expected to find Method but found {:?}", self.peek(0));
+            self.runtime_error(&msg);
+        }
+    }
+
+    // closure id is add here in case the frame needs to access the heap
+    // to get upvalues
     fn call(&mut self, function: &Rc<Function>, closure_id: ObjId, arity: u8) -> bool {
         if arity != function.arity {
             let err_msg: String =

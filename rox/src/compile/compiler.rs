@@ -46,6 +46,12 @@ impl Local<'_> {
     }
 }
 
+type ClassNode = Option<Box<ClassCompiler>>;
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ClassCompiler {
+    enclosing: ClassNode,
+}
+
 /// index stores which local slot the upvalue is capturing.
 /// HACK: this should be an index since we already allow > 255 constants
 /// is_local: is true if it captures a local in its immediate scope.
@@ -74,6 +80,7 @@ pub struct Compiler<'src> {
     function_type: FunctionType,
     enclosing: Option<Box<Compiler<'src>>>,
     upvalues: Vec<UpValue>,
+    cur_class: ClassNode,
 }
 
 impl<'src> Compiler<'src> {
@@ -95,6 +102,7 @@ impl<'src> Compiler<'src> {
             function_type: FunctionType::default(),
             enclosing: None,
             upvalues: vec![],
+            cur_class: None,
         };
 
         // we need this for alignment, the function then looks for params/ args starting from index 1.
@@ -288,6 +296,11 @@ impl<'src> Compiler<'src> {
         // instruction to create class object at runtime, takes the constant
         // table index of the class's name as an operand
         self.define_variable(name_idx, true);
+        let class_cmp = ClassCompiler {
+            enclosing: self.cur_class.clone(),
+        };
+        self.cur_class = Some(Box::new(class_cmp));
+        // loads the class back on top of the stack
         self.named_variable(class_tok, false);
 
         self.consume(Kind::LeftBrace, "Expect `{` before class body.");
@@ -299,6 +312,9 @@ impl<'src> Compiler<'src> {
         }
         self.consume(Kind::RightBrace, "Expect `}` after class body.");
         self.emit_opcode(OpCode::Pop);
+        // restore enclosing state for compiling classes
+        let class_cmp = *self.cur_class.as_ref().unwrap().to_owned();
+        self.cur_class = class_cmp.enclosing;
     }
 
     fn method(&mut self) {
@@ -306,8 +322,17 @@ impl<'src> Compiler<'src> {
         let previous = self.parser.borrow().previous;
         let _ = interner::intern(previous.lexeme);
         let name = self.identifier_constant(previous);
-        self.function(FunctionType::Function);
+        self.function(FunctionType::Method);
         self.emit_opcode_operand(OpCode::Method, name);
+    }
+
+    fn this(&mut self) {
+        if self.cur_class.is_none() {
+            self.parser
+                .borrow_mut()
+                .error("Cannot use `this` outside of a class");
+        }
+        self.variable(false);
     }
 
     fn dot(&mut self, can_assign: bool) {
@@ -353,13 +378,35 @@ impl<'src> Compiler<'src> {
             const_globals: Vec::new(),
             function: Function::new(),
             function_type: func_type,
+            cur_class: Some(Box::new(ClassCompiler {
+                enclosing: enclosing.cur_class.clone(),
+            })),
             enclosing: Some(Box::new(enclosing)),
             upvalues: vec![],
         };
 
         inner.function.name = Some(function_name.to_owned());
+        // Slot 0 is reserved for the instance when compiling method calls
+        // Functions are however not allowed to use the `this` keyword. so if
+        // a function declaration is inside a method it resolves to the enclosing
+        // method i.e
+        // class ... {
+        //  method() {
+        //      fun foo() { print this; }
+        //      foo();
+        //    }
+        // }
+        let this = if func_type != FunctionType::Function {
+            Token {
+                kind: Kind::Identifier,
+                lexeme: "this",
+                line: 0,
+            }
+        } else {
+            Token::default()
+        };
         inner.locals.push(Local {
-            name: Token::default(),
+            name: this,
             depth: 0,
             is_const: false,
             is_captured: false,
@@ -405,6 +452,7 @@ impl<'src> Compiler<'src> {
             .current_chunk()
             .add_if_absent(Value::LoxFunction(function));
         // operand to this opcode, is the constant functions index in the constants table.
+        // TODO: if bytes_to_emit is empty, we can emit a Function instead of a closure
         self.emit_opcode_operand(OpCode::Closure, index);
 
         // variable encoding of the byte is now
@@ -1121,7 +1169,8 @@ static RULES: [ParseRule; 40] = {
         |compiler, _| compiler.binary(),
         Precedence::Term,
     );
-
+    rules[(Kind::This) as usize] =
+        ParseRule::new_prefix(|compiler, _| compiler.this(), Precedence::None);
     rules[(Kind::Dot) as usize] = ParseRule::new_infix(
         |compiler, can_assign| compiler.dot(can_assign),
         Precedence::Call,
