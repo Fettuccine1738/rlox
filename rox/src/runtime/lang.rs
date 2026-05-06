@@ -4,7 +4,7 @@ use crate::runtime::heap::{GcValue, Heap};
 use std::fmt::Display;
 
 /// NOTE: move to object.rs once complexity increases.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     // like Java limit a function's parameter count to < 255
     // < 255 because methods, take self implicitly as an argument
@@ -14,9 +14,13 @@ pub struct Function {
     pub upvalue_count: usize,
 }
 
-impl PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        self.arity == other.arity && self.name == other.name
+impl Function {
+    // since gc has no access to compile time objects
+    // free up all unused buffers in this function. 
+    pub fn free_unused_mem(&mut self) {
+        self.chunk.code.shrink_to_fit();
+        self.chunk.constants.shrink_to_fit();
+        self.chunk.lines.shrink_to_fit();
     }
 }
 

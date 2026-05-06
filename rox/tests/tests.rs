@@ -314,7 +314,9 @@ pub mod test {
             class C < B {}
 
             C().test();
-                     ";
+            B().method();
+
+            ";
         assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
     }
 }

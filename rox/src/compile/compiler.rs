@@ -51,7 +51,7 @@ impl Local<'_> {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ClassCompiler<'src> {
-    token: Token<'src>,
+    _token: Token<'src>,
     has_super: bool,
 }
 
@@ -243,6 +243,7 @@ impl<'src> Compiler<'src> {
         #[cfg(feature = "")]
         Chunk::disassemble(self.current_chunk(), &display_string);
 
+        self.function.free_unused_mem();
         let function = std::mem::take(&mut self.function);
         Rc::new(function)
     }
@@ -310,7 +311,7 @@ impl<'src> Compiler<'src> {
         // table index of the class's name as an operand
         self.define_variable(name_idx, true);
         self.class_stack.borrow_mut().push(ClassCompiler {
-            token: class_tok,
+            _token: class_tok,
             has_super: false,
         });
 
@@ -1220,14 +1221,6 @@ impl ParseRule {
         Self {
             prefix: None,
             infix: Some(i_fix),
-            precedence: precedenc,
-        }
-    }
-
-    const fn new_precedence(precedenc: Precedence) -> Self {
-        Self {
-            prefix: None,
-            infix: None,
             precedence: precedenc,
         }
     }

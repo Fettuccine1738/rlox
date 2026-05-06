@@ -392,15 +392,16 @@ impl Heap {
     }
 
     pub fn orchestrate_inherit(&mut self, superclass: ObjId, subclass: ObjId) -> bool {
-        self.objects[superclass.0].clone().is_some_and(|obj| {
-            if let Some(supa) = obj.as_class()
+        let super_obj = self.objects[superclass.0].clone();
+        if super_obj.is_some() {
+            if let Some(supa) = super_obj.unwrap().as_class()
                 && let GcValue::Class(sub) = &mut self.objects[subclass.0].as_mut().unwrap().value
             {
                 sub.methods.add_all(supa.methods);
                 return true;
             }
-            false
-        });
+            return false;
+        }
         false
     }
 
