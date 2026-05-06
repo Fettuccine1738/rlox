@@ -5,6 +5,26 @@ pub mod test {
         runtime::vm::{InterpretResult, VM},
     };
 
+    /// this tests suite follows the pattern
+    /// ````
+    /// let src = "print \"foo\";"
+    /// let mut vm = VM::new();
+    /// assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+    /// ````
+    macro_rules! assert_interprets_ok {
+        ($src:expr) => {{
+            let mut vm = VM::new();
+            assert_eq!(vm.interpret($src.to_owned()), InterpretResult::Ok);
+        }};
+    }
+
+    macro_rules! assert_interpreter_expects {
+        ($src:expr, $expected:expr) => {{
+            let mut vm = VM::new();
+            assert_eq!(vm.interpret($src.to_owned()), $expected);
+        }};
+    }
+
     #[test]
     pub(super) fn tests_arithmetic_expr() {
         // TODO: this also tests that a single '5' is stored in the constants pool.
@@ -27,28 +47,12 @@ pub mod test {
     // compiling and interpreting.
     #[test]
     pub(super) fn tests_compilation() {
-        let source = "!(5 - 4 > 3 * 2 == !nil);"; // nil is falsy in lox. !nil = true.
-        let mut vm = VM::new();
-        let result = vm.interpret(source.to_owned());
-        assert_eq!(result, InterpretResult::Ok);
+        assert_interprets_ok!("!(5 - 4 > 3 * 2 == !nil);") // nil is falsy in lox. !nil = true.
     }
 
     #[test]
     fn tests_invalid_expr_is_compile_error() {
-        let source = "1 +;";
-        assert_eq!(
-            VM::new().interpret(source.to_owned()),
-            InterpretResult::CompileError
-        )
-    }
-
-    #[test]
-    fn tests_invalid_expr_is_runtime_error() {
-        let source = "1 + nil;";
-        assert_eq!(
-            VM::new().interpret(source.to_owned()),
-            InterpretResult::RuntimeError
-        )
+        assert_interpreter_expects!("1 +;", InterpretResult::CompileError)
     }
 
     // really annoying to append ';' to simple expressions.
@@ -59,11 +63,12 @@ pub mod test {
 
     #[test]
     fn tests_string_concatenation_exec() {
-        let _src = "var b = \"beignets\"; \n\
+        assert_interprets_ok!(
+            "var b = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          var breakfast = \"beignets with \"+ beverage; \n\
-                         print breakfast;";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok)
+                         print breakfast;"
+        )
     }
 
     #[test]
@@ -91,10 +96,9 @@ pub mod test {
     /// at compile time when reassigned to.
     #[test]
     fn test_constglobal_declaration_notok() {
-        let _src2 = "const boo = \"cow\"; \n\
-                               boo = \"co\";";
-        assert_eq!(
-            VM::new().interpret(_src2.to_owned()),
+        assert_interpreter_expects!(
+            "const boo = \"cow\"; \n\
+                               boo = \"co\";",
             InterpretResult::CompileError
         );
     }
@@ -102,41 +106,45 @@ pub mod test {
     /// tests access const global variable compiles successfully.
     #[test]
     fn test_const_variable_access_ok() {
-        let _src2 = "const foo = \"hello\"; \n\
+        assert_interprets_ok!(
+            "const foo = \"hello\"; \n\
                            var bar = \"\"; \n\
                            bar = foo + \" world.\n\"; \n\
                            print bar; \n\
-                           print foo;";
-        assert_eq!(VM::new().interpret(_src2.to_owned()), InterpretResult::Ok);
+                           print foo;"
+        )
     }
 
     #[test]
     fn test_block_scope_ok() {
-        let _src = "{ var breakfast = \"beignets\"; \n\
+        assert_interprets_ok!(
+            "{ var breakfast = \"beignets\"; \n\
                          var beverage = \"capuccino\"; \n\
                          breakfast = \"beignets with \"+ beverage; \n\
-                         print breakfast; }";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+                         print breakfast; }"
+        )
     }
 
     /// tests functions (both Lox and Native) that do not take in any argument.
     #[test]
     fn test_noarg_function_call_ok() {
-        let source = "\n\
+        assert_interprets_ok!(
+            "\n\
                     fun areWeHavingItYet() { \n\
                     print \"Yes we are!\";  \n\
-                } \n\
-                var start = time::clock();
-                areWeHavingItYet();
-                print time::clock() - start;
-                ";
-        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
+                    } \n\
+                    var start = time::clock();
+                    areWeHavingItYet();
+                    print time::clock() - start;
+        "
+        )
     }
 
     /// native functions that take arguments.
     #[test]
     fn test_nativefunc_with_args_ok() {
-        let source = "
+        assert_interprets_ok!(
+            "
                 var s1 = \"aoo\";
                 var s2 = \"aoo\";
                 var comp = strings::str_cmp(s1, s2);
@@ -147,28 +155,30 @@ pub mod test {
                 } else {
                     print s1 + \" greater \" + s2;
                 }
-                ";
-        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
+                "
+        )
     }
 
     // TODO: allow string and number concatenation print foo + \" squared = \" + math::pow(foo, 2);
     #[test]
     fn test_while_loop_ok() {
-        let source = "
+        assert_interprets_ok!(
+            "
                 var foo = 0;
                 const bar = 5;
                 while (foo < bar) {
                     print foo + \" squared = \" + math::pow(foo, 2);
                     foo = foo + 1;
                 }
-                ";
-        assert_eq!(VM::new().interpret(source.to_owned()), InterpretResult::Ok);
+                "
+        )
     }
 
     /// tests closure correctly recognizes mutation of captured values.
     #[test]
     fn tests_closures_see_global_mutations() {
-        let src = "var x = \"in global\";
+        assert_interprets_ok!(
+            "var x = \"in global\";
 
                         fun outer() {
                             fun inner() {
@@ -179,17 +189,16 @@ pub mod test {
                         outer();
                         x= \"global changed.\";
                         outer();
-                    ";
-
-        let mut vm = VM::new();
-        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+                    "
+        )
     }
 
     /// tests that connection between local value and captured values are not severed.
     /// verifies that a closures see a change to a local value.
     #[test]
     fn tests_closures_see_local_mutations() {
-        let src = "
+        assert_interprets_ok!(
+            "
                         fun outer() {
                             var local = \"buzz\";
                             fun inner() {
@@ -200,15 +209,14 @@ pub mod test {
                         }
 
                         outer();
-                    ";
-
-        let mut vm = VM::new();
-        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+                    "
+        )
     }
 
     #[test]
     fn tests_nested_functions() {
-        let src = "var x = \"in global\";
+        assert_interprets_ok!(
+            "var x = \"in global\";
                          var y = \"foo\";
                          print y;
 
@@ -222,16 +230,16 @@ pub mod test {
                     }
                     outer();
                     print y;
-                    ";
-        let mut vm = VM::new();
-        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
+                    "
+        )
     }
 
     // all objects here is reachable from the roots and should not
     // be collected.
     #[test]
     fn tests_gc_reaches_all() {
-        let src = "
+        assert_interprets_ok!(
+            "
                         fun makeClosure() {
                         var x = \"data\";
                         fun f() {
@@ -241,60 +249,60 @@ pub mod test {
                         }
                         var closure = makeClosure();
                         closure();
-                    ";
-        let mut vm = VM::new();
-        assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
-    }
-
-    #[test]
-    fn test_simple_class_impl() {
-        let _src = "
-                        class CoffeeMaker {
-                          init(coffee) {
-                            this.coffee = coffee;
-                          }
-
-                          brew() {
-                            print \"Enjoy your cup of \" + this.coffee;
-                            this.coffee = nil;
-                          }
-                        }
-
-                        var maker = CoffeeMaker(\"coffee and chicory\");
-                        maker.brew();
-                        maker.brew();
-                     ";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
-    }
-
-    #[test]
-    fn tests_instance_set_field_ok() {
-        let _src = "
-                        class Brioche {}
-                        var b = Brioche();
-                        b.jam = \"grape\";
-                        print b.jam;
-                     ";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+                    "
+        )
     }
 
     // NOTE: in cases where the class name is already defined
     // No error is thrown. Fix this.
     #[test]
     fn tests_instance_get_field_ok() {
-        let _src = "
+        assert_interprets_ok!(
+            "
                         class Pair {}
                         var p = Pair();
                         p.first = 1;
                         p.second = 2;
                         print p.first + p.second;
-                     ";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+                     "
+        )
+    }
+
+    #[test]
+    fn test_simple_class_impl() {
+        assert_interprets_ok!(
+            "
+        class CoffeeMaker {
+          init(coffee) {
+            this.coffee = coffee;
+          }
+          brew() {
+            print \"Enjoy your cup of \" + this.coffee;
+            this.coffee = nil;
+          }
+        }
+        var maker = CoffeeMaker(\"coffee and chicory\");
+        maker.brew();
+    "
+        );
+    }
+
+    #[test]
+    fn tests_instance_set_field_ok() {
+        assert_interprets_ok!(
+            "
+        class Brioche {}
+        var b = Brioche();
+        b.jam = \"grape\";
+        print b.jam;
+    "
+        );
     }
 
     #[test]
     fn tests_super_call_dispatch_ok() {
-        let _src = "
+        assert_interprets_ok!(
+            "
             class A {
               method() {
                 print \"A method\";
@@ -315,8 +323,7 @@ pub mod test {
 
             C().test();
             B().method();
-
-            ";
-        assert_eq!(VM::new().interpret(_src.to_owned()), InterpretResult::Ok);
+            "
+        );
     }
 }

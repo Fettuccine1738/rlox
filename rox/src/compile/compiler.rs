@@ -315,8 +315,8 @@ impl<'src> Compiler<'src> {
             has_super: false,
         });
 
-        // to please the borrow checker 
-        let mut  has_super = false;
+        // to please the borrow checker
+        let mut has_super = false;
 
         if self.match_token(Kind::Less) {
             self.consume(Kind::Identifier, "Expect superclass name");

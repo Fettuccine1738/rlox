@@ -16,7 +16,7 @@ pub struct Function {
 
 impl Function {
     // since gc has no access to compile time objects
-    // free up all unused buffers in this function. 
+    // free up all unused buffers in this function.
     pub fn free_unused_mem(&mut self) {
         self.chunk.code.shrink_to_fit();
         self.chunk.constants.shrink_to_fit();
