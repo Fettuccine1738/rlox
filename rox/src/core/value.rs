@@ -44,6 +44,9 @@ pub enum Value {
     String(SymbolU32),
     NativeFunction(NativeFn),
     Object(ObjId), // pointer into the GC Heap
+    // this variant is for convenience and not in the book.
+    // It is for Native function use only.
+    Index(usize),
 }
 
 impl Value {
@@ -86,6 +89,14 @@ impl Value {
 
     pub fn is_string(&self) -> bool {
         matches!(self, Self::String(_))
+    }
+
+    pub fn as_sizet(value: &Value) -> usize {
+        match value {
+            Value::Index(i) => *i,
+            Value::Number(n) => *n as usize,
+            _ => panic!("Expected Variant Number | Index  but got {:?}", value),
+        }
     }
 
     pub fn as_bool(value: &Value) -> bool {

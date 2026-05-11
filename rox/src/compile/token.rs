@@ -31,6 +31,8 @@ pub enum Kind {
     // single char tokens
     LeftParen,
     RightParen,
+    LeftSqBracket,
+    RightSqBracket,
     LeftBrace,
     RightBrace,
     Comma,

@@ -8,15 +8,15 @@ use std::rc::Rc;
 use string_interner::Symbol;
 use string_interner::symbol::{self, SymbolU32};
 
-use crate::compile::compiler::Compiler;
+use crate::compile::compiler::{Compiler, LONG_ARG_INDEX};
 use crate::core::chunk::Chunk;
 use crate::core::opcode::OpCode;
 use crate::core::value::{NativeFn, ObjId, Value};
 use crate::data_structures::interner::{self};
 use crate::data_structures::map::HashTable;
-use crate::runtime::gc::Trace;
+use crate::runtime::gc::{self, Trace};
 use crate::runtime::heap::{
-    GcObject, GcValue, Heap, LoxClass, LoxClosure, LoxInstance, UpValueState,
+    GcObject, GcValue, Heap, LoxClass, LoxClosure, LoxInstance, LoxVec, UpValueState,
 };
 use crate::runtime::lang::CallFrame;
 use crate::runtime::lang::Function;
@@ -45,12 +45,6 @@ pub struct VM {
     pub open_upvalues: HashMap<usize, ObjId>,
     heap: Heap,             // dummy: *mut * mut Value
     init_symbol: SymbolU32, // `this` keyword
-}
-
-impl Trace for VM {
-    fn trace(&self, heap: &mut super::heap::Heap) {
-        todo!()
-    }
 }
 
 impl Default for VM {
@@ -93,6 +87,7 @@ impl VM {
                 self.define_native("math::max".to_owned(), NativeFn(math::max));
                 self.define_native("math::pow".to_owned(), NativeFn(math::pow));
                 self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
+                self.define_native("strings::str_len".to_owned(), NativeFn(strings::str_len));
 
                 // guard against garbage collection.
                 self.stack.push(Value::LoxFunction(func.clone()));
@@ -293,7 +288,7 @@ impl VM {
                         Self::runtime_error(
                             self,
                             format!(
-                                "Undefinded Variable  '{}'.",
+                                "Undefined Variable  '{}'.",
                                 interner::get_string(symbol).unwrap()
                             )
                             .as_str(),
@@ -436,7 +431,7 @@ impl VM {
                 }
                 OpCode::SetProperty => {
                     if let Value::Object(id) = self.peek(1) {
-                        // NOTE: how we are looking at depth 1, because 0 is the field
+                        // NOTE: the object whose property is being set sits depth 1, 0 is the field
                         let field: SymbolU32 = self.read_string().unwrap();
                         let v = self.peek(0);
 
@@ -490,6 +485,74 @@ impl VM {
                     if let Value::Object(sup_id) = self.pop().unwrap()
                         && !self.invoke_from_class(sup_id, name, arg_count)
                     {
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+                OpCode::Array => {
+                    let items = if self.read_byte() == LONG_ARG_INDEX {
+                        let mut buffer: [u8; 3] = [255, 255, 255];
+                        self.read_3_bytes(&mut buffer);
+                        Chunk::inverse_resolve(buffer[0], buffer[1], buffer[2])
+                    } else {
+                        self.read_byte() as usize
+                    };
+                    let item_start = self.stack.len() - items;
+                    let list: Vec<Value> = self.stack[item_start..].to_vec();
+                    let gc_obj = GcObject::new(GcValue::List(LoxVec(list)));
+                    let heap_list = self.heap.alloc(gc_obj);
+                    // remove existing objects and push the list ref onto the stack
+                    self.stack.truncate(item_start);
+                    self.stack.push(Value::Object(heap_list));
+                }
+                OpCode::ArrayGetItem => {
+                    // at this point the result of the expression [`expr`] is on the stack
+                    let index = self.peek(0);
+                    let arr = self.peek(1);
+                    if let Value::Number(n) = index
+                        && let Value::Object(id) = arr
+                    {
+                        let o = self.heap.get(id);
+
+                        match o.get_list_item(n as usize) {
+                            Some(v) => {
+                                // similar with GetProperty, we remove the array and index and leave the
+                                // gotten value on the stack.
+                                // self.pop(); // pop index
+                                // self.pop(); // pop array
+                                self.push_value(v);
+                            }
+                            None => {
+                                self.runtime_error("Invalid array access operation");
+                                return InterpretResult::RuntimeError;
+                            }
+                        }
+                    } else {
+                        self.runtime_error("array index expression but evaluate to a number");
+                        return InterpretResult::RuntimeError;
+                    }
+                }
+                OpCode::ArraySetItem => {
+                    // at this point the result of the expression [`expr`] is on the stack
+                    let new_val = self.peek(0);
+                    let index = self.peek(1);
+                    let arr = self.peek(2);
+                    if let Value::Number(n) = index
+                        && let Value::Object(id) = arr
+                    {
+                        let o = self.heap.get_mut(id);
+
+                        if o.set_list_item(n as usize, new_val) {
+                            // like SetProperty, we leave the new_val on the stack and pop array and index
+                            let new_val = self.pop().unwrap();
+                            let _ = self.pop(); // pop index
+                            let _ = self.pop(); // pop array
+                            self.push_value(new_val);
+                        } else {
+                            self.runtime_error("Invalid array access operation");
+                            return InterpretResult::RuntimeError;
+                        }
+                    } else {
+                        self.runtime_error("array index expression but evaluate to a number");
                         return InterpretResult::RuntimeError;
                     }
                 }

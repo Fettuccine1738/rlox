@@ -94,10 +94,17 @@ impl Chunk {
                 println!(" RETURN");
                 offset + 1
             }
+            OpCode::ArrayGetItem => Self::simple_instruction("OP_ARRAY_ACCESS", offset),
+            OpCode::ArraySetItem => todo!(),
             OpCode::Class => chunk.constant_instruction("OP_CLASS", offset),
             OpCode::GetProperty => chunk.constant_instruction("OP_GET_PROPERTY", offset),
             OpCode::SetProperty => chunk.constant_instruction("OP_SET_PROPERTY", offset),
             OpCode::Method => chunk.constant_instruction("OP_METHOD", offset),
+            OpCode::Array => {
+                let index = chunk.code[offset + 1];
+                println!("OP_Array initialized with {index} values");
+                offset + 2
+            }
             OpCode::Constant => {
                 let index = chunk.read_constant(offset);
                 println!("  OP_CONSTANT\t{}\t{}", index, chunk.constants[index]);

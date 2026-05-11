@@ -43,6 +43,8 @@ impl<'src> Scanner<'src> {
             ')' => self.make_token(Kind::RightParen),
             '{' => self.make_token(Kind::LeftBrace),
             '}' => self.make_token(Kind::RightBrace),
+            '[' => self.make_token(Kind::LeftSqBracket),
+            ']' => self.make_token(Kind::RightSqBracket),
             ';' => self.make_token(Kind::SemiColon),
             ',' => self.make_token(Kind::Comma),
             '.' => self.make_token(Kind::Dot),

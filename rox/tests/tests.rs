@@ -269,6 +269,32 @@ pub mod test {
     }
 
     #[test]
+    fn test_instance_field_access_ok() {
+        assert_interprets_ok!(
+            "
+        class CoffeeMaker {
+          init(coffee) {
+            this.coffee = coffee;
+          }
+          brew() {
+            print \"Enjoy your cup of \" + this.coffee;
+          }
+        }
+
+        class Restaurant {}
+        var maker = CoffeeMaker(\"coffee and chicory\");
+        maker.brew();
+
+        var rst = Restaurant();
+        rst.bev = maker;
+        rst.bev.coffee = \"foo\";
+        print rst.bev.coffee;
+        rst.bev.brew();
+    "
+        );
+    }
+
+    #[test]
     fn test_simple_class_impl() {
         assert_interprets_ok!(
             "
@@ -297,6 +323,33 @@ pub mod test {
         print b.jam;
     "
         );
+    }
+
+    #[test]
+    fn tests_array_ops_ok() {
+        assert_interprets_ok!(
+            "
+                var foo = \"bar\";
+                var arr = [[4.0, \"baz\"],1, 2.0, foo];
+                print arr[0][1];
+
+                arr[2] = 3.142;
+                print arr[2];
+            "
+        )
+    }
+
+    #[test]
+    fn tests_array_access_notok() {
+        assert_interpreter_expects!(
+            "
+                var foo = \"bar\";
+                var arr = [[4.0, \"baz\"],1, 2.0, foo];
+                print arr[3];
+                print arr[0][2];
+            ",
+            InterpretResult::RuntimeError
+        )
     }
 
     #[test]

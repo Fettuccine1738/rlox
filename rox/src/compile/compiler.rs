@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::{mem, vec};
 
@@ -10,10 +10,11 @@ use crate::core::opcode::OpCode;
 use crate::core::value::Value;
 use crate::data_structures::interner::{self};
 use crate::runtime::{lang::Function, lang::FunctionType};
+use crate::std::is_native_call;
 
 pub const FUNCTION_ARG_MAX: u32 = 255;
-pub const LONG_UPVALUE_INDEX: u8 = 1; // index of a captured value sitting on slot > 255
-pub const SHORT_UPVALUE_INDEX: u8 = 0; // vice versa
+pub const LONG_ARG_INDEX: u8 = 1; // index of a captured value sitting on slot > 255
+pub const SHORT_ARG_INDEX: u8 = 0; // vice versa
 // dummy Parse Rule, required in cases where an error occured,
 // causing an unexpected TokenKind to be used to indexed the ParseRule table.
 // Compiler in some cases doesn't stop.
@@ -21,6 +22,13 @@ pub static DEFAULT_ERR_RULE: ParseRule = ParseRule::default();
 pub const INIT_KEYWORD: &str = "init"; // for constructors e.g `java` Foo(bar, baz) {}
 pub const THIS_KEYWORD: &str = "this";
 pub const SUPER_KEYWORD: &str = "super";
+
+// name existing means it has been declared
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Global<'src> {
+    name: Token<'src>,
+    is_const: bool,
+}
 
 #[derive(Debug, Default)]
 pub struct Local<'src> {
@@ -76,7 +84,10 @@ pub struct Compiler<'src> {
     // in the parser lives as long as the source string.
     parser: Rc<RefCell<Parser<'src>>>,
     locals: Vec<Local<'src>>,
-    const_globals: Vec<usize>,
+    /// `Clox` assumes that if a variable is not found, in its ecnlosing compiler's locals
+    /// then it must be a global variable. Since we attempt to catch this at compile,
+    /// every function  should share the same globals.
+    globals: Rc<RefCell<Vec<Global<'src>>>>,
     scope_depth: i32, // the number of blocks surrouding the current bit of code being compiled.
     // local_count: u32 not needed, vec.len() already tracks how many locals are in scope.
     function: Function,
@@ -98,7 +109,7 @@ impl<'src> Compiler<'src> {
             parser: Rc::new(RefCell::new(Parser::new(source))),
             scope_depth: 0,
             locals: vec![],
-            const_globals: vec![],
+            globals: Rc::new(RefCell::new(vec![])),
             // interior mutabliity, this is so we can return the function after compiling
             // and don't have to worry about `dangling` ptr once compile is finished.
             function: Function::new(),
@@ -461,7 +472,7 @@ impl<'src> Compiler<'src> {
             parser: enclosing.parser.clone(),
             locals: Vec::new(),
             scope_depth: 0,
-            const_globals: Vec::new(),
+            globals: enclosing.globals.clone(),
             function: Function::new(),
             function_type: func_type,
             class_stack: enclosing.class_stack.clone(),
@@ -545,14 +556,14 @@ impl<'src> Compiler<'src> {
             if index > 255 {
                 // is_long flag (used in cases where the captured variable) means
                 // is the (255+th) variable in the captured local or upvalue.
-                self.emit_byte(LONG_UPVALUE_INDEX);
+                self.emit_byte(LONG_ARG_INDEX);
                 // emit 3 bytes
                 let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(index as usize);
                 self.emit_byte(bits0_7);
                 self.emit_byte(bits8_15);
                 self.emit_byte(bits16);
             } else {
-                self.emit_byte(SHORT_UPVALUE_INDEX); // !is_long index into upvalues or locals.
+                self.emit_byte(SHORT_ARG_INDEX); // !is_long index into upvalues or locals.
                 self.emit_byte(index as u8);
             }
             self.emit_byte(is_local);
@@ -614,14 +625,28 @@ impl<'src> Compiler<'src> {
                 // for UpValue, it is the index in the upvalues array.
                 Some((idx, is_const)) => (OpCode::GetUpValue, OpCode::SetUpValue, idx, is_const),
                 _ => {
-                    // here it is the index in its chunk constants pool.
+                    // it's index in its chunk constants pool.
                     let idx: usize = self.identifier_constant(name);
-                    (
-                        OpCode::GetGlobal,
-                        OpCode::SetGlobal,
-                        idx,
-                        self.const_globals.contains(&idx),
-                    )
+                    let gl: Global = match self
+                        .globals
+                        .borrow_mut()
+                        .iter()
+                        .find(|&&decl| decl.name.lexeme == name.lexeme)
+                    {
+                        Some(g) => *g,
+                        None => {
+                            if !is_native_call(name.lexeme) {
+                                let msg = format!(
+                                    "Undeclared variable `{}` is being assigned to",
+                                    name.lexeme
+                                );
+                                self.parser.borrow_mut().error(&msg);
+                            }
+                            Global::default()
+                        }
+                    };
+
+                    (OpCode::GetGlobal, OpCode::SetGlobal, idx, gl.is_const)
                 }
             },
         };
@@ -715,9 +740,6 @@ impl<'src> Compiler<'src> {
             return;
         }
 
-        if is_const {
-            self.const_globals.push(global); // compiler knows index at this slot is immutable
-        }
         self.emit_opcode_operand(OpCode::DefineGlobal, global);
     }
 
@@ -951,6 +973,47 @@ impl<'src> Compiler<'src> {
         }
     }
 
+    /// `[` should have been consumed before this function is called.
+    fn arrays(&mut self) {
+        let mut items: usize = 0;
+        if !self.check(Kind::RightSqBracket) {
+            loop {
+                self.expression();
+                items += 1;
+                if !self.match_token(Kind::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(Kind::RightSqBracket, "Expect `]` after array values.");
+        self.emit_opcode(OpCode::Array);
+        // structure is [Array][(0|1)][(1byte|3bytes)]
+        if items > 255 {
+            self.emit_byte(LONG_ARG_INDEX);
+            let (bits0_7, bits8_15, bits16) = Chunk::resolve_index(items);
+            self.emit_byte(bits0_7);
+            self.emit_byte(bits8_15);
+            self.emit_byte(bits16);
+        } else {
+            self.emit_byte(SHORT_ARG_INDEX);
+            self.emit_byte(items as u8);
+        }
+    }
+
+    /// variable name and `[` have been consumed.
+    fn array_access(&mut self, can_assign: bool) {
+        self.expression(); // consume array index
+        self.consume(Kind::RightSqBracket, "Expect `]` when indexing arrays.");
+        if can_assign && self.match_token(Kind::Equal) {
+            // compile RHS
+            self.expression();
+            self.emit_opcode(OpCode::ArraySetItem);
+        } else {
+            self.emit_opcode(OpCode::ArrayGetItem);
+        }
+    }
+
     fn expr_statement(&mut self) {
         self.expression();
         self.consume(Kind::SemiColon, "Expect ';' after expression.");
@@ -1089,8 +1152,8 @@ impl<'src> Compiler<'src> {
 
     fn declare_variable(&mut self, is_const: bool) {
         let name = self.parser.borrow().previous;
-        interner::intern(name.lexeme);
         if self.scope_depth == 0 {
+            self.globals.borrow_mut().push(Global { name, is_const });
             return;
         }
 
@@ -1123,23 +1186,8 @@ impl<'src> Compiler<'src> {
 
     fn identifier_constant(&mut self, token: Token) -> usize {
         let name = token.lexeme;
-        match interner::get_symbol(name) {
-            Some(symbol) => self.current_chunk().add_if_absent(Value::String(symbol)),
-            None => {
-                // NOTE: although we are reporting an error and halt compilation.
-                // we still add the constant to the pool. This is because this function still needs a valid
-                // value to return.
-                let sym = interner::intern(name);
-                let index = self.current_chunk().add_if_absent(Value::String(sym));
-                // NOTE: do not report error if it is a native function.
-                if crate::std::is_native_call(name) {
-                    return index;
-                }
-                let err_msg = format!("undeclared variable `{}` is being assigned to.", name);
-                self.parser.borrow_mut().error_at_current(&err_msg);
-                index
-            }
-        }
+        let s = interner::intern(name);
+        self.current_chunk().add_if_absent(Value::String(s))
     }
 
     fn get_parse_rule(kind: Kind) -> &'static ParseRule {
@@ -1300,6 +1348,11 @@ static RULES: [ParseRule; 40] = {
     rules[(Kind::LeftParen as u8) as usize] = ParseRule::new(
         |compiler, _| compiler.grouping(),
         |compiler, _| compiler.call(),
+        Precedence::Call,
+    );
+    rules[(Kind::LeftSqBracket as u8) as usize] = ParseRule::new(
+        |compiler, _| compiler.arrays(),
+        |compiler, can_assign| compiler.array_access(can_assign),
         Precedence::Call,
     );
     rules

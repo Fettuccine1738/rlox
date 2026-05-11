@@ -43,13 +43,16 @@ pub enum OpCode {
     Invoke = 35,
     Inherit = 36,
     GetSuper = 37,
-    SuperInvoke = 38, // Design choice on why OpCodes for !=, <=, >= are not implemented.
-                      // the bytecode instructions does not need to follow closely to the user's
-                      // source code. The VM has total freedom to use whatever instruction set and code sequence
-                      // as long as they have the right behavior.
-                      // Semantically: a != b  === !(a == b)
-                      // a <= b === !(a > b)
-                      // a >= b === !(a < b). except for floating-point NaN
+    SuperInvoke = 38,
+    Array = 39,
+    ArrayGetItem = 40,
+    ArraySetItem = 41, // Design choice on why OpCodes for !=, <=, >= are not implemented.
+                       // the bytecode instructions does not need to follow closely to the user's
+                       // source code. The VM has total freedom to use whatever instruction set and code sequence
+                       // as long as they have the right behavior.
+                       // Semantically: a != b  === !(a == b)
+                       // a <= b === !(a > b)
+                       // a >= b === !(a < b). except for floating-point NaN
 }
 
 impl Display for OpCode {
@@ -104,6 +107,9 @@ impl TryFrom<u8> for OpCode {
             36 => Ok(Self::Inherit),
             37 => Ok(Self::GetSuper),
             38 => Ok(Self::SuperInvoke),
+            39 => Ok(Self::Array),
+            40 => Ok(Self::ArrayGetItem),
+            41 => Ok(Self::ArraySetItem),
             _ => Err(()),
         }
     }

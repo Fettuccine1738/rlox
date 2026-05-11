@@ -16,8 +16,16 @@ pub fn is_native_call(func_name: &str) -> bool {
         "io::readLine",
         "io::readNumber",
         "strings::str_cmp",
+        "strings::str_len",
     ]
     .contains(&func_name)
+}
+
+fn validate_args(arg_count: usize, args: &[Value]) -> VmResult {
+    match args.len().checked_sub(arg_count) {
+        Some(i) => Ok(Value::Index(i)),
+        None => Err(VmError::Runtime("Stack underflow".to_string())),
+    }
 }
 
 pub mod time {
@@ -41,12 +49,10 @@ pub mod math {
             return Err(VmError::Runtime("Expects only 1 argument.".to_string()));
         }
 
-        let index = nums
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
+        let v = validate_args(arg_count, nums)?;
+        let start: usize = Value::as_sizet(&v);
 
-        if let Value::Number(double) = nums[index] {
+        if let Value::Number(double) = nums[start] {
             Ok(Value::Number(double.sqrt()))
         } else {
             Err(VmError::Runtime("Expects a double(f64).".to_string()))
@@ -54,11 +60,8 @@ pub mod math {
     }
 
     pub fn pow(arg_count: usize, nums: &[Value]) -> VmResult {
-        // arity checking.
-        let start = nums
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
+        let v = validate_args(arg_count, nums)?;
+        let start: usize = Value::as_sizet(&v);
 
         match (&nums[start], &nums[start + 1]) {
             (Value::Number(p), Value::Number(q)) => Ok(Value::Number(p.powf(*q))),
@@ -67,11 +70,8 @@ pub mod math {
     }
 
     pub fn max(arg_count: usize, nums: &[Value]) -> VmResult {
-        // arity checking.
-        let start = nums
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
+        let v = validate_args(arg_count, nums)?;
+        let start: usize = Value::as_sizet(&v);
 
         match (&nums[start], &nums[start + 1]) {
             (Value::Number(p), Value::Number(q)) => Ok(Value::Number(p.max(*q))),
@@ -87,12 +87,7 @@ pub mod io {
 
     use super::*;
 
-    pub fn read_line(arg_count: usize, args: &[Value]) -> VmResult {
-        let _start = args
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
-
+    pub fn read_line(_arg_count: usize, _args: &[Value]) -> VmResult {
         match read() {
             Ok(buffer) => {
                 let symbol = interner::intern(buffer.trim());
@@ -108,12 +103,7 @@ pub mod io {
         Ok(buffer)
     }
 
-    pub fn read_number(arg_count: usize, args: &[Value]) -> VmResult {
-        let _start = args
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
-
+    pub fn read_number(_arg_count: usize, _args: &[Value]) -> VmResult {
         match read() {
             Ok(s) => match s.parse::<f64>() {
                 Ok(num) => Ok(Value::Number(num)),
@@ -131,13 +121,25 @@ pub mod strings {
 
     use super::*;
 
+    pub fn str_len(arg_count: usize, args: &[Value]) -> VmResult {
+        let v = validate_args(arg_count, args)?;
+        let start: usize = Value::as_sizet(&v);
+
+        if let Value::String(symbol) = args[start] {
+            let s = interner::get_string(symbol).unwrap();
+            return Ok(Value::Number(s.len() as f64));
+        } else {
+            Err(VmError::Native(
+                "String length only computable for strings.".to_string(),
+            ))
+        }
+    }
+
     pub fn str_cmp(arg_count: usize, args: &[Value]) -> VmResult {
         // NOTE: unlike other functions where the order is irrelevant.
         // the return value is like
-        let start = args
-            .len()
-            .checked_sub(arg_count)
-            .ok_or_else(|| VmError::Runtime("Stack underflow".to_string()))?;
+        let v = validate_args(arg_count, args)?;
+        let start: usize = Value::as_sizet(&v);
 
         match (&args[start], &args[start + 1]) {
             (Value::String(s_1), Value::String(s_2)) => {
@@ -152,5 +154,12 @@ pub mod strings {
                 "string compare expected type of Strings.".to_string(),
             )),
         }
+    }
+}
+
+pub mod utils {
+    // utility method for lox, to get length of strings, lists etc.
+    pub fn len() {
+        todo!()
     }
 }

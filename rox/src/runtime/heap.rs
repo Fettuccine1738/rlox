@@ -22,21 +22,21 @@ use string_interner::symbol::SymbolU32;
 const GC_THRESHOLD: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Trace)]
-pub struct GcObject {
+pub(crate) struct GcObject {
     pub value: GcValue,
     #[unsafe_ignore_trace]
     is_marked: bool,
 }
 
 impl GcObject {
-    pub fn new(gcvalue: GcValue) -> Self {
+    pub(crate) fn new(gcvalue: GcValue) -> Self {
         Self {
             value: gcvalue,
             is_marked: false,
         }
     }
 
-    pub fn as_function(&self) -> Option<Rc<Function>> {
+    pub(crate) fn as_function(&self) -> Option<Rc<Function>> {
         if let GcValue::Closure(lc) = &self.value {
             return Some(lc.function.clone());
         }
@@ -45,32 +45,65 @@ impl GcObject {
 
     // WARNING: always clone the GcOBject before use, because we consume
     // its value
-    pub fn as_class(self) -> Option<LoxClass> {
+    pub(crate) fn as_class(self) -> Option<LoxClass> {
         if let GcValue::Class(lc) = self.value {
             return Some(lc);
         }
         None
     }
 
-    pub fn is_instance(&self) -> bool {
+    /// returns a boolean if the set operation was succesful i.e
+    /// field is a list and the array index is valid.
+    pub(crate) fn set_list_item(&mut self, at: usize, with: Value) -> bool {
+        if let GcValue::List(list) = &mut self.value {
+            if list.0.len() > at {
+                list.0[at] = with;
+                return true;
+            }
+            return false;
+        }
+        false
+    }
+
+    pub(crate) fn get_list_item(&self, at: usize) -> Option<Value> {
+        if let GcValue::List(list) = &self.value {
+            return list.0.get(at).cloned();
+        }
+        None
+    }
+
+    pub(crate) fn is_instance(&self) -> bool {
         matches!(self.value, GcValue::Instance(_))
     }
 
-    pub fn is_closure(&self) -> bool {
+    pub(crate) fn is_closure(&self) -> bool {
         matches!(self.value, GcValue::Closure(_))
     }
 
-    pub fn is_class(&self) -> bool {
+    pub(crate) fn is_class(&self) -> bool {
         matches!(self.value, GcValue::Class(_))
     }
 
-    pub fn is_method(&self) -> bool {
+    pub(crate) fn is_method(&self) -> bool {
         matches!(self.value, GcValue::Method(_))
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct LoxVec(pub Vec<Value>);
+
+impl Trace for LoxVec {
+    fn trace(&self, heap: &mut super::heap::Heap) {
+        for v in self.0.iter() {
+            if let Value::Object(id) = v {
+                id.trace(heap);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Trace)]
-pub struct BoundMethod {
+pub(crate) struct BoundMethod {
     pub receiver: ObjId, // points to the LoxInstance
     pub closure: ObjId,  //  points to the LoxClosure on the heap
 }
@@ -84,7 +117,7 @@ impl BoundMethod {
 /// Classes : are how we create new instances, name required to get instance
 /// contain methods: behavior of Instances
 #[derive(Debug, Clone)]
-pub struct LoxClass {
+pub(crate) struct LoxClass {
     name: String,       // we can use LoxString here but this is easier for debugging
     methods: HashTable, // HashMap<SymbolU32, Function>
 }
@@ -118,7 +151,7 @@ impl LoxClass {
 /// value of type ObjClass. Likewise, each instance in the user’s
 /// program, no matter what class it is an instance of, is an ObjInstance.
 #[derive(Debug, Clone)]
-pub struct LoxInstance {
+pub(crate) struct LoxInstance {
     pub class: ObjId,
     fields: HashTable,
 }
@@ -159,7 +192,7 @@ impl Trace for LoxInstance {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoxClosure {
+pub(crate) struct LoxClosure {
     pub function: Rc<Function>,
     pub upvalues: Vec<ObjId>,
     pub upvalue_count: usize,
@@ -195,13 +228,13 @@ impl Display for LoxClosure {
 /// Open UpValue refer to an upvalue that points to a local variable still on the stack.
 /// Closed refers to a variable moved to the Heap.
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum UpValueState {
+pub(crate) enum UpValueState {
     Open(usize),   // index into the vm's stack.
     Closed(Value), // captured after close_upvalues()
 }
 
 #[derive(Debug, Clone, Trace)]
-pub enum GcValue {
+pub(crate) enum GcValue {
     Instance(LoxInstance),
     Method(BoundMethod),
     // we trace through Objects to get to a class,
@@ -211,9 +244,10 @@ pub enum GcValue {
     Closure(LoxClosure),
     #[unsafe_ignore_trace]
     UpValue(UpValueState),
+    List(LoxVec),
 }
 
-pub struct Heap {
+pub(crate) struct Heap {
     pub objects: Vec<Option<GcObject>>,
     pub grey_stack: Vec<ObjId>,
     pub bytes_allocated: usize,
@@ -232,7 +266,7 @@ impl Heap {
         }
     }
 
-    // pub fn mark_roots(&mut self, vm: &VM) {
+    // pub(crate) fn mark_roots(&mut self, vm: &VM) {
     //     self.mark_stack(&vm.stack);
     //     self.mark_table(&vm.globals);
     //     self.mark_frames(&vm.call_frames);
@@ -319,7 +353,7 @@ impl Heap {
         }
     }
 
-    pub fn alloc(&mut self, object: GcObject) -> ObjId {
+    pub(crate) fn alloc(&mut self, object: GcObject) -> ObjId {
         if self.bytes_allocated > self.next_gc {
             self.collect_garbage();
         }

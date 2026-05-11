@@ -89,7 +89,7 @@ impl HashTable {
     pub const fn new() -> Self {
         Self {
             len: 0,
-            entries: Vec::new()
+            entries: Vec::new(),
         }
     }
 
@@ -107,16 +107,16 @@ impl HashTable {
 
     // checks if key exists.
     fn get_key_index(&self, key: SymbolU32) -> ProbeResult {
-        let cap = self.entries.capacity();
+        let len = self.entries.len();
         // NOTE: instead of hashing SymbolU32 are already unique.
         // we can use them as hashed ids of the strings interned.
-        let start: usize = fnv1_hash(key) & (cap - 1);
+        let start: usize = fnv1_hash(key) % len; // & (cap - 1);
         let mut index = start;
         loop {
             match &self.entries[index] {
                 Some(entry) if entry.key == key => return ProbeResult::Found(index), //return &mut self.entries[index],
                 None => return ProbeResult::Empty(index),
-                _ => index = (index + 1) % (cap - 1),
+                _ => index = (index + 1) % len,
             }
 
             if index == start {
@@ -181,7 +181,7 @@ impl HashTable {
         if self.entries.is_empty() {
             return None;
         }
-        let cap = self.entries.capacity();
+        let len = self.entries.len();
         match self.get_key_index(key) {
             ProbeResult::Empty(_) | ProbeResult::Full => None, // there is nothing to remove
             ProbeResult::Found(index) => {
@@ -191,10 +191,10 @@ impl HashTable {
                     self.len -= 1;
 
                     // rehash all entries following the deleted slot.
-                    let mut i = (index + 1) % (cap - 1);
+                    let mut i = (index + 1) % len;
                     while let Some(entry) = self.entries[i].take() {
                         self.insert(entry.key, entry.value);
-                        i = (i + 1) % (cap - 1);
+                        i = (i + 1) % len;
                     }
                 }
                 removed
