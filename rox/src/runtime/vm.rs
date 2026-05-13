@@ -757,16 +757,17 @@ impl VM {
         id
     }
 
-    // takes name of function and the Funtion ptr
     fn define_native(&mut self, name: String, function: NativeFn) {
         let symbol = interner::intern(&name);
-        // done because Garbage collection can be triggered anywhere.
-        self.push_value(Value::String(symbol));
-        self.push_value(Value::NativeFunction(function));
-
+        // NOTE: `Clox` pushes here to guard against garbage collection, 
+        // `RlOX` however triggers garbage collection on only heap allocation, if `Heap::alloc()` 
+        // is not called, garbage collection never happens. The code is commented out for reference. 
+        // self.push_value(Value::String(symbol));
+        // self.push_value(Value::NativeFunction(function));
         self.globals.insert(symbol, self.stack[1].clone());
-        self.pop();
-        self.pop();
+        // same here
+        // self.pop();
+        // self.pop();
     }
 
     /// FIX: we already allocated the closure on the heap, ideally
@@ -841,7 +842,7 @@ impl VM {
         self.reset_stack();
     }
 
-    // is_long : when opcode is OP_CONSTANT_LONG: Operand is 24bits.
+    // HACK: `is_long` is a fragile heuristic to determine when an oprand to opcode is OP_CONSTANT_LONG: Operand is 24bits.
     fn read_constant(&mut self) -> Value {
         let is_long = self.call_frames.last().unwrap().is_long(&self.heap);
         let index = if is_long {
@@ -861,10 +862,8 @@ impl VM {
             .clone()
     }
 
-    // reads the 16 bit operand for jump opCodes
-    // retrurns a u16
+    /// reads the 16 bit operand for jump opCodes
     fn read_short(&mut self) -> u16 {
-        // le order
         let b0_7 = self.read_byte() as u16;
         let b8_15 = self.read_byte() as u16;
         b0_7 | b8_15 << 8
