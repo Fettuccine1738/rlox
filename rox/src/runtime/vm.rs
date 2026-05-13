@@ -88,6 +88,7 @@ impl VM {
                 self.define_native("math::pow".to_owned(), NativeFn(math::pow));
                 self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
                 self.define_native("strings::str_len".to_owned(), NativeFn(strings::str_len));
+                self.define_native("utils::list_len".to_owned(), NativeFn(strings::str_len));
 
                 // guard against garbage collection.
                 self.stack.push(Value::LoxFunction(func.clone()));
@@ -517,8 +518,8 @@ impl VM {
                             Some(v) => {
                                 // similar with GetProperty, we remove the array and index and leave the
                                 // gotten value on the stack.
-                                // self.pop(); // pop index
-                                // self.pop(); // pop array
+                                self.pop(); // pop index
+                                self.pop(); // pop array
                                 self.push_value(v);
                             }
                             None => {

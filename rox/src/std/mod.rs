@@ -17,6 +17,7 @@ pub fn is_native_call(func_name: &str) -> bool {
         "io::readNumber",
         "strings::str_cmp",
         "strings::str_len",
+        "utils::list_len",
     ]
     .contains(&func_name)
 }
@@ -158,8 +159,19 @@ pub mod strings {
 }
 
 pub mod utils {
+    use super::*;
+
     // utility method for lox, to get length of strings, lists etc.
-    pub fn len() {
-        todo!()
+    pub fn list_len(arg_count: usize, args: &[Value]) -> VmResult {
+        let v = validate_args(arg_count, args)?;
+        let start: usize = Value::as_sizet(&v);
+
+        if let Value::String(symbol) = args[start] {
+            return Ok(Value::Nil);
+        } else {
+            Err(VmError::Native(
+                "String length only computable for strings.".to_string(),
+            ))
+        }
     }
 }

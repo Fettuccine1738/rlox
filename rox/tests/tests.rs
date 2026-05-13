@@ -379,4 +379,53 @@ pub mod test {
             "
         );
     }
+
+    #[test]
+    fn tests_matrix_mul() {
+        assert_interprets_ok!(
+            "
+                var a = [
+                    [1.0, 2.0, 3.0],
+                    [3.0, 2.0, 1.0],
+                    [1.0, 2.0, 3.0]
+                ];
+
+                var b = [
+                    [4.0, 5.0, 6.0],
+                    [6.0, 5.0, 4.0],
+                    [4.0, 6.0, 5.0]
+                ];
+
+                var result = [
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0]
+                ];
+
+                var i = 0;
+                while (i < 3) {
+                    var j = 0;
+
+                    while (j < 3) {
+                        var sum = 0.0;
+
+                        var k = 0;
+                        while (k < 3) {
+                            sum = sum + a[i][k] * b[k][j];
+                            k = k + 1;
+                        }
+
+                        result[i][j] = sum;
+                        j = j + 1;
+                    }
+
+                    i = i + 1;
+                }
+
+                print result[0][0];
+                print result[1][1];
+                print result[2][2];
+            "
+        )
+    }
 }
