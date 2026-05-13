@@ -8,11 +8,12 @@ use rox::runtime::vm::VM;
 
 pub const COMPILE_ERR_CODE: i32 = 65;
 pub const RUNTIME_ERR_CODE: i32 = 70;
+pub const FILEIO_ERR_CODE: i32 = 74;
 
 pub fn repl(vm: &mut VM) {
     loop {
+        println!(">> ");
         let mut source: String = String::new();
-        print!("> ");
         match io::stdin().read_line(&mut source) {
             Ok(_) => (),
             Err(error) => eprintln!("error: {error}"),
@@ -30,7 +31,7 @@ pub fn run_file(path: &str, vm: &mut VM) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Could not open the file: {}", e);
-            std::process::exit(74);
+            std::process::exit(FILEIO_ERR_CODE);
         }
     };
 
@@ -44,7 +45,7 @@ pub fn run_file(path: &str, vm: &mut VM) {
 }
 
 fn main() {
-    let mut vm: VM = vm::VM::new();
+    let mut vm: VM = vm::VM::init();
     let args: Vec<String> = env::args().skip(1).collect::<Vec<String>>();
 
     if args.len() == 0 {

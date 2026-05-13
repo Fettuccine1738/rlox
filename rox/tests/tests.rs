@@ -5,22 +5,22 @@ pub mod test {
         runtime::vm::{InterpretResult, VM},
     };
 
-    /// this tests suite follows the pattern
+    /// this tests in this test suite mostly follow the pattern
     /// ````
     /// let src = "print \"foo\";"
-    /// let mut vm = VM::new();
+    /// let mut vm = VM::init();
     /// assert_eq!(vm.interpret(src.to_owned()), InterpretResult::Ok);
     /// ````
     macro_rules! assert_interprets_ok {
         ($src:expr) => {{
-            let mut vm = VM::new();
+            let mut vm = VM::init();
             assert_eq!(vm.interpret($src.to_owned()), InterpretResult::Ok);
         }};
     }
 
     macro_rules! assert_interpreter_expects {
         ($src:expr, $expected:expr) => {{
-            let mut vm = VM::new();
+            let mut vm = VM::init();
             assert_eq!(vm.interpret($src.to_owned()), $expected);
         }};
     }
@@ -30,7 +30,7 @@ pub mod test {
         // TODO: this also tests that a single '5' is stored in the constants pool.
         // debug outputs should show 2 constants saved 5 and 4.
         let source = "print 5 - 4 + 5;";
-        let mut vm = VM::new();
+        let mut vm = VM::init();
         assert_eq!(vm.interpret(source.to_string()), InterpretResult::Ok);
     }
 
@@ -39,7 +39,7 @@ pub mod test {
         // TODO: this also tests that a single '5' is stored in the constants pool.
         // debug outputs should show 2 constants saved 5 and 4.
         let source = "var simple = 5 - 4 + 5;";
-        let mut vm = VM::new();
+        let mut vm = VM::init();
         assert_eq!(vm.interpret(source.to_string()), InterpretResult::Ok);
     }
 

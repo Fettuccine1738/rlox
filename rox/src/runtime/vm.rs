@@ -54,13 +54,25 @@ impl Default for VM {
 }
 
 impl VM {
-    pub fn init(&mut self) {
-        self.reset_stack();
+    /// creates a new vm and defines some native functions supported
+    pub fn init() -> Self {
+        let mut v = Self::new();
+        v.define_native("io::readNumber".to_owned(), NativeFn(io::read_number));
+        v.define_native("io::readLine".to_owned(), NativeFn(io::read_line));
+        v.define_native("time::clock".to_owned(), NativeFn(time::clock));
+        v.define_native("math::sqrt".to_owned(), NativeFn(math::sqrt));
+        v.define_native("math::max".to_owned(), NativeFn(math::max));
+        v.define_native("math::pow".to_owned(), NativeFn(math::pow));
+        v.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
+        v.define_native("strings::str_len".to_owned(), NativeFn(strings::str_len));
+        v.define_native("utils::list_len".to_owned(), NativeFn(strings::str_len));
+        v.reset_stack();
+
+        v
     }
 
     pub fn new() -> Self {
         Self {
-            // chunk: None, // we don't always start out with valid chunks
             stack: Vec::with_capacity(STACK_MAX),
             globals: HashTable::new(),
             call_frames: Vec::with_capacity(FRAMES_MAX),
@@ -80,16 +92,6 @@ impl VM {
             Some(func) => {
                 #[cfg(feature = "")]
                 println!("{}", func.chunk);
-                self.define_native("io::readNumber".to_owned(), NativeFn(io::read_number));
-                self.define_native("io::readLine".to_owned(), NativeFn(io::read_line));
-                self.define_native("time::clock".to_owned(), NativeFn(time::clock));
-                self.define_native("math::sqrt".to_owned(), NativeFn(math::sqrt));
-                self.define_native("math::max".to_owned(), NativeFn(math::max));
-                self.define_native("math::pow".to_owned(), NativeFn(math::pow));
-                self.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
-                self.define_native("strings::str_len".to_owned(), NativeFn(strings::str_len));
-                self.define_native("utils::list_len".to_owned(), NativeFn(strings::str_len));
-
                 // guard against garbage collection.
                 self.stack.push(Value::LoxFunction(func.clone()));
                 self.stack.pop();

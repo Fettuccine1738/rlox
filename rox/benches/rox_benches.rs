@@ -14,7 +14,7 @@ fn bench_fibonacci(c: &mut Criterion) {
 }
 
 fn run_lox(source: &str) {
-    let mut vm = vm::VM::new();
+    let mut vm = vm::VM::init();
     let _result: vm::InterpretResult = vm.interpret(source.to_owned());
     std::hint::black_box(source);
 }
