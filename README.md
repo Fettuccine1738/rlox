@@ -1,6 +1,6 @@
 # rlox
 
-A bytecode virtual machine interpreter for the [Lox](https://craftinginterpreters.com/) programming language, implemented in Rust. This is a Rust port of the `clox` VM from Robert Nystrom's *Crafting Interpreters*, with several design decisions and extensions that deviate from the reference implementation.
+A bytecode virtual machine interpreter for the [Lox](https://craftinginterpreters.com/) programming language, implemented in Rust. This is a Rust port of the `clox` VM from Robert Nystrom's *Crafting Interpreters*, extended with **first-class arrays** (including multi-dimensional indexing and assignment) and several other design decisions that deviate from the reference implementation.
 
 ---
 
@@ -31,7 +31,46 @@ The compiler is a **single-pass, recursive-descent Pratt parser** — it produce
 
 ## Notable Design Decisions & Extensions
 
-### 1. `OpCode::Constant24` — Supports more than 255 Constants
+### 1. First-Class Arrays with Heap Allocation
+
+Arrays are a first-class value type in `rlox`, stored on the heap and referenced via the GC-managed `Heap`. An array literal `[e1, e2, ...]` evaluates each element expression and collects the results into a `GcValue::Array`. Multi-dimensional arrays are supported naturally since array elements can themselves be arrays — `[[1, 2], [3, 4]]` is an array of two `GcValue::Array` references.
+
+**Indexing** uses a dedicated `OpCode::ArrayGetItem` instruction (get) and `OpCode::ArraySetItem` (set):
+
+```
+a[i]        
+a[i][j] = v 
+            
+```
+
+**Chained indexing** like `result[i][j] = sum` works by treating each `[]` application as a separate index expression, with the final `[j]` compiled as an assignment target. The matrix multiplication test exercises this fully — a 3×3 matrix multiply using nested `while` loops and chained index assignment:
+
+```lox
+var a = [[1.0, 2.0, 3.0], [3.0, 2.0, 1.0], [1.0, 2.0, 3.0]];
+var b = [[4.0, 5.0, 6.0], [6.0, 5.0, 4.0], [4.0, 6.0, 5.0]];
+var result = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]];
+
+var i = 0;
+while (i < 3) {
+    var j = 0;
+    while (j < 3) {
+        var sum = 0.0;
+        var k = 0;
+        while (k < 3) {
+            sum = sum + a[i][k] * b[k][j];
+            k = k + 1;
+        }
+        result[i][j] = sum;
+        j = j + 1;
+    }
+    i = i + 1;
+}
+print result[0][0]; // 28
+```
+
+---
+
+### 2. `OpCode::Constant24` — Supports more than 255 Constants
 
 The standard `OP_CONSTANT` instruction encodes its operand in a single byte, limiting a chunk to **256 unique constants**. `rlox` adds `OpCode::Constant24`, whose operand is a **24-bit little-endian integer**, raising the ceiling to **16,777,216 constants**.
 
@@ -58,7 +97,7 @@ The VM's `read_constant` mirrors this, accepting an `is_long` flag to read eithe
 
 ---
 
-### 2. String Interning via `string-interner`
+### 3. String Interning via `string-interner`
 
 Rather than heap-allocating a `String` per string value, all strings are **interned** into a global `StringInterner` (backed by `string_interner = "0.19.0"`). Each unique string is stored exactly once, and `Value::String` carries a compact `SymbolU32` *(4 byte)* handle instead of the string data itself.
 
@@ -89,7 +128,7 @@ pub fn get_string(symbol: SymbolU32) -> Option<String> { ... }
 
 ---
 
-### 3. Deduplicating the Constants Pool (`add_if_absent`)
+### 4. Deduplicating the Constants Pool (`add_if_absent`)
 
 The compiler calls `Chunk::add_if_absent` when storing identifiers (variable names) as constants. Rather than pushing a new `Value::String` entry every time the same variable name appears in source, this method scans the pool and returns the existing index if a matching value is already present:
 
@@ -108,7 +147,7 @@ This reduces redundant entries in the constants pool for programs with many refe
 
 ---
 
-### 4. No Separate `OP_NOT_EQUAL`, `OP_LESS_EQUAL`, `OP_GREATER_EQUAL`
+### 5. No Separate `OP_NOT_EQUAL`, `OP_LESS_EQUAL`, `OP_GREATER_EQUAL`
 
 Rather than adding dedicated opcodes for `!=`, `<=`, and `>=`, the compiler composes existing opcodes:
 
@@ -122,7 +161,7 @@ This keeps the instruction set minimal. The VM has total freedom over its instru
 
 ---
 
-### 5. Custom Hash Table (`HashTable`) with Open Addressing
+### 6. Custom Hash Table (`HashTable`) with Open Addressing
 
 `src/data_structures/mod.rs` implements a hand-rolled `HashTable<SymbolU32, Value>` using **open addressing with linear probing** and **FNV-1 hashing** over the `SymbolU32` key. This is used for the global variable store in the VM.
 
@@ -132,7 +171,7 @@ This keeps the instruction set minimal. The VM has total freedom over its instru
 
 ---
 
-### 6. Pratt Parser with a Static `RULES` Table
+### 7. Pratt Parser with a Static `RULES` Table
 
 Operator precedence and associativity are encoded in a `static RULES: [ParseRule; 40]` array indexed by `Kind as u8`. Each entry holds an optional prefix parse function, an optional infix parse function, and a `Precedence` level — the classic Pratt approach. Because the table is `const`-initialized with function pointers (not closures), it requires no heap allocation.
 
@@ -159,6 +198,8 @@ static RULES: [ParseRule; 40] = {
 - Global variable declaration (`var`) and assignment
 - Expression statements (result discarded via `OP_POP`)
 - Single-line comments (`//`)
+- Array literals and nested arrays (`[1, 2, 3]`, `[[1, 2], [3, 4]]`)
+- Array element access and assignment via indexing (`a[i]`, `a[i][j] = val`)
 
 ---
 
@@ -234,7 +275,9 @@ The disassembler prints annotated bytecode to stdout during compilation (enabled
 - `run-length encoding` for line number storage is not yet implemented (tracked in `todo.txt`).
 - The REPL loop in `main.rs` is stubbed — `interpret()` calls `todo!()`.
 - `read_string` in the VM uses `self.ip >= chunk.index_const24` as a heuristic to detect long constants, which is incorrect for some cases.
-- no rehashing for `HashTable`.
+- No rehashing for `HashTable`.
 - Runtime only garbage collection, garbage not collected during compilation.
 - All strings are interned and owned by the string-interner. Therefore they cannot be garbage collected.
-- Replace string-interner with our own Api, to allow string collection by gc.
+- Replace string-interner with our own API, to allow string collection by GC.
+- No bounds checking on array access — out-of-range indices produce a runtime error.
+- Arrays are not yet printable as formatted output (`print arr` may not render element contents).
