@@ -102,11 +102,6 @@ const BOOK_SAMPLE: &str = r#"
                     }
 "#;
 
-// fn bench_class_instance(c: &mut Criterion) {
-//     c.bench_function("lox_instance_field_access", |b| {
-//         b.iter(|| run_lox(black_box(BOOK_SAMPLE)))
-//     });
-// }
 fn bench_class_instance(c: &mut Criterion) {
     let mut group = c.benchmark_group("lox_instance_field_access");
 
