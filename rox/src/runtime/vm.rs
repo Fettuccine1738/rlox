@@ -66,6 +66,7 @@ impl VM {
         v.define_native("strings::str_cmp".to_owned(), NativeFn(strings::str_cmp));
         v.define_native("strings::str_len".to_owned(), NativeFn(strings::str_len));
         v.define_native("utils::list_len".to_owned(), NativeFn(strings::str_len));
+        v.define_native("clock".to_owned(), NativeFn(time::clock));
         v.reset_stack();
 
         v

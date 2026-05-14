@@ -10,6 +10,7 @@ pub type VmResult = Result<Value, VmError>;
 pub fn is_native_call(func_name: &str) -> bool {
     [
         "time::clock",
+        "clock",
         "math::max",
         "math::sqrt",
         "math::pow",

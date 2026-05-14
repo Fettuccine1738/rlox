@@ -37,6 +37,10 @@ impl<'src> Scanner<'src> {
         if Self::is_alpha(ch) {
             return Some(self.identifier());
         }
+        
+        if ch == '/' && let Some('/') = self.peek() {
+            self.skip_comment();
+        }
 
         Some(match ch {
             '(' => self.make_token(Kind::LeftParen),
@@ -81,7 +85,6 @@ impl<'src> Scanner<'src> {
                 }
             }
             '"' => self.string(),
-            // _ => todo!(),
             _ => self.error_token("Unexpected character."),
         })
     }
@@ -123,21 +126,6 @@ impl<'src> Scanner<'src> {
         }
     }
 
-    // fn check_keyword(
-    //     &mut self,
-    //     start: usize,
-    //     length: usize,
-    //     rest: &'static str,
-    //     kind: Kind,
-    // ) -> Kind {
-    //     if self.current - self.start == start + length
-    //         && &self.source[self.start + start..self.start + start + length] == rest
-    //     {
-    //         return kind;
-    //     }
-    //     Kind::Identifier
-    // }
-
     fn number(&mut self) -> Token<'src> {
         while let Some(ch) = self.peek() {
             if ch.is_ascii_digit() {
@@ -171,6 +159,21 @@ impl<'src> Scanner<'src> {
         } else {
             self.current += 1;
             true
+        }
+    }
+
+    fn skip_comment(&mut self) {
+        loop {
+            match self.peek() {
+                Some('\n') => {
+                    self.line += 1;
+                    break;
+                },
+                Some(_) => {
+                    self.advance();
+                }
+                _ => break,
+            }
         }
     }
 

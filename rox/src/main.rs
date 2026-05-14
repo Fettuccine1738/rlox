@@ -66,10 +66,8 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect::<Vec<String>>();
 
     if args.len() == 0 {
-        println!("Starting REPL");
         repl(&mut vm);
     } else if args.len() == 1 {
-        println!("Running file");
         run_file(&args[0], &mut vm);
     } else {
         eprintln!("ROX does not expect more than one argument.");
