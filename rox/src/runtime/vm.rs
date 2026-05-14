@@ -86,22 +86,23 @@ impl VM {
         self.stack.clear();
     }
 
+    /// NOTE: `Clox` often pushes values on the stack to guard against garbage collection,
+    /// `RlOX` however triggers garbage collection on only heap allocation, if `Heap::alloc()`
+    /// is not called, garbage collection never happens. So we do not need this preemptive stack
     pub fn interpret(&mut self, source: String) -> InterpretResult {
         match Compiler::compile(&source) {
             None => InterpretResult::CompileError,
             Some(func) => {
                 #[cfg(feature = "")]
                 println!("{}", func.chunk);
-                // guard against garbage collection.
-                self.stack.push(Value::LoxFunction(func.clone()));
-                self.stack.pop();
-                //---
+
                 let func_clone: Rc<Function> = Rc::clone(&func);
                 let cloj_id = self.heap.alloc_closure(LoxClosure {
                     function: func.clone(),
                     upvalues: vec![],
                     upvalue_count: 0,
                 });
+
                 self.stack.push(Value::Object(cloj_id));
                 self.call(&func, ObjId(0), 0);
                 self.run()
@@ -759,12 +760,12 @@ impl VM {
 
     fn define_native(&mut self, name: String, function: NativeFn) {
         let symbol = interner::intern(&name);
-        // NOTE: `Clox` pushes here to guard against garbage collection, 
-        // `RlOX` however triggers garbage collection on only heap allocation, if `Heap::alloc()` 
-        // is not called, garbage collection never happens. The code is commented out for reference. 
+        // NOTE: `Clox` pushes here to guard against garbage collection,
+        // `Rlox` however triggers garbage collection on only heap allocation, if `Heap::alloc()`
+        // is not called, garbage collection never happens. The code is commented out for reference.
         // self.push_value(Value::String(symbol));
         // self.push_value(Value::NativeFunction(function));
-        self.globals.insert(symbol, self.stack[1].clone());
+        self.globals.insert(symbol, Value::NativeFunction(function));
         // same here
         // self.pop();
         // self.pop();

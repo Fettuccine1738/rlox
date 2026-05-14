@@ -271,9 +271,8 @@ The disassembler prints annotated bytecode to stdout during compilation (enabled
 
 ## Known Limitations / Planned Work
 
-- `OpCode::Not` is missing a disassembly branch (currently `todo!()` in `Chunk::disassemble_instruction`).
+- `OpCode::ArraySetItem` is missing a disassembly branch (currently `todo!()` in `Chunk::disassemble_instruction`).
 - `run-length encoding` for line number storage is not yet implemented (tracked in `todo.txt`).
-- The REPL loop in `main.rs` is stubbed — `interpret()` calls `todo!()`.
 - `read_string` in the VM uses `self.ip >= chunk.index_const24` as a heuristic to detect long constants, which is incorrect for some cases.
 - No rehashing for `HashTable`.
 - Runtime only garbage collection, garbage not collected during compilation.

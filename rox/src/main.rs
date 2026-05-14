@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::io;
+use std::io::BufRead;
 
 use rox::runtime::vm;
 use rox::runtime::vm::InterpretResult;
@@ -13,11 +14,27 @@ pub const FILEIO_ERR_CODE: i32 = 74;
 pub fn repl(vm: &mut VM) {
     loop {
         println!(">> ");
-        let mut source: String = String::new();
-        match io::stdin().read_line(&mut source) {
-            Ok(_) => (),
-            Err(error) => eprintln!("error: {error}"),
+        let mut source = String::new();
+        let stdin = io::stdin();
+
+        loop {
+            let mut line = String::new();
+            match stdin.lock().read_line(&mut line) {
+                Ok(0) => break, 
+                Ok(_) => {
+                    if line.trim().is_empty() {
+                        break;
+                    }
+                    source.push_str(&line);
+                }
+                Err(error) => eprintln!("error: {error}"),
+            }
         }
+
+        if source.is_empty() {
+            continue;
+        }
+
         match vm.interpret(source) {
             InterpretResult::CompileError => std::process::exit(COMPILE_ERR_CODE),
             InterpretResult::RuntimeError => std::process::exit(RUNTIME_ERR_CODE),
