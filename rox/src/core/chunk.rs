@@ -62,7 +62,7 @@ impl Chunk {
         self.write(op_code as u8, line);
     }
 
-    #[cfg(feature  = "trace_execution")]
+    #[cfg(feature = "trace_execution")]
     pub fn disassemble(chunk: &Chunk, name: &str) {
         println!("====={name}=====");
         let mut i = 0usize;

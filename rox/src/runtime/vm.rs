@@ -94,7 +94,7 @@ impl VM {
         match Compiler::compile(&source) {
             None => InterpretResult::CompileError,
             Some(func) => {
-                #[cfg(feature  = "trace_execution")]
+                #[cfg(feature = "trace_execution")]
                 println!("{}", func.chunk);
 
                 let func_clone: Rc<Function> = Rc::clone(&func);
@@ -152,7 +152,7 @@ impl VM {
     }
 
     fn run(&mut self) -> InterpretResult {
-        #[cfg(feature  = "trace_execution")]
+        #[cfg(feature = "trace_execution")]
         if DEBUG_TRACE {
             for v in &self.stack {
                 if let Value::Object(id) = v {
@@ -164,7 +164,7 @@ impl VM {
         }
 
         loop {
-            #[cfg(feature  = "trace_execution")]
+            #[cfg(feature = "trace_execution")]
             if DEBUG_TRACE {
                 let start = self.get_current_frame().ip;
                 Chunk::disassemble_instruction(self.current_chunk(), start);
