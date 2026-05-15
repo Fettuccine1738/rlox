@@ -22,6 +22,7 @@ pub static DEFAULT_ERR_RULE: ParseRule = ParseRule::default();
 pub const INIT_KEYWORD: &str = "init"; // for constructors e.g `java` Foo(bar, baz) {}
 pub const THIS_KEYWORD: &str = "this";
 pub const SUPER_KEYWORD: &str = "super";
+pub const UNINIT_VARIABLE: i32 = -1;
 
 // name existing means it has been declared
 #[derive(Debug, Default, Clone, Copy)]
@@ -49,7 +50,11 @@ pub struct Local<'src> {
 // when methods don't take an argument/return reference related to src
 impl Local<'_> {
     pub fn is_initialized(&self) -> bool {
-        self.depth != -1
+        !self.is_uninitialized()
+    }
+
+    pub fn is_uninitialized(&self) -> bool {
+        self.depth == UNINIT_VARIABLE
     }
 
     pub fn is_immutable(&self) -> bool {
@@ -299,7 +304,7 @@ impl<'src> Compiler<'src> {
             if self.function_type == FunctionType::Init {
                 self.parser
                     .borrow_mut()
-                    .error("Can't return a value from an initializer")
+                    .error("Can't return a value from an initializer.")
             }
             self.expression();
             self.consume(Kind::SemiColon, "Expect ';' after return value.");
@@ -645,11 +650,7 @@ impl<'src> Compiler<'src> {
                         Some(g) => *g,
                         None => {
                             if !is_native_call(name.lexeme) {
-                                let msg = format!(
-                                    "Undeclared variable `{}` is being assigned to",
-                                    name.lexeme
-                                );
-                                self.parser.borrow_mut().error(&msg);
+                                self.parser.borrow_mut().error(" Undeclared variable cannot be accessed");
                             }
                             Global::default()
                         }
@@ -677,7 +678,7 @@ impl<'src> Compiler<'src> {
     fn resolve_local(&mut self, name: &Token) -> Option<(usize, bool)> {
         for (idx, local) in self.locals.iter().enumerate().rev() {
             if name.lexeme == local.name.lexeme {
-                if !local.is_initialized() {
+                if local.is_uninitialized() {
                     self.parser
                         .borrow_mut()
                         .error("Can't read local variable in its own initializer.");
@@ -1174,12 +1175,10 @@ impl<'src> Compiler<'src> {
             if local.depth != -1 && local.depth < self.scope_depth {
                 break;
             }
-            let msg = format!(
-                "Error at '{}' : Already a variable with this name in scope",
-                name.lexeme
-            );
             if name.lexeme == local.name.lexeme {
-                self.parser.borrow_mut().error(&msg);
+                self.parser
+                    .borrow_mut()
+                    .error("Already a variable with this name in this scope.");
             }
         }
         self.add_local(name, is_const);
@@ -1188,7 +1187,7 @@ impl<'src> Compiler<'src> {
     fn add_local(&mut self, token: Token<'src>, immutable: bool) {
         self.locals.push(Local {
             name: token,
-            depth: self.scope_depth,
+            depth: UNINIT_VARIABLE,
             is_const: immutable,
             is_captured: false,
         });

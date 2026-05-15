@@ -165,7 +165,7 @@ impl Display for Value {
         match &self {
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
-            Value::Nil => write!(f, "[NIL]"),
+            Value::Nil => write!(f, "nil"), // [NIL] better but to please lox_test_suite
             Value::String(id) => {
                 let s = interner::get_string(*id).unwrap();
                 write!(f, "{}", s)

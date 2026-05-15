@@ -476,8 +476,34 @@ pub mod test {
         // variables
         lox_test!(
             collide_with_params,
-            "tests/lox_samples/test/variable/collide_with_parameter.lox"
+            "tests/lox_samples/test/variable/collide_with_parameter.lox",
+            InterpretResult::CompileError
         );
+
+        lox_test!(
+            duplicate_locals,
+            "tests/lox_samples/test/variable/duplicate_local.lox",
+            InterpretResult::CompileError
+        );
+
+         lox_test!(
+            illegal_keyword_use,
+            "tests/lox_samples/test/variable/use_nil_as_var.lox",
+            InterpretResult::CompileError
+        );
+
+        lox_test!(
+            illegal_value_initializer,
+            "tests/lox_samples/test/variable/use_local_in_initializer.lox",
+            InterpretResult::CompileError
+        );
+
+        lox_test!(
+            unreached_undefined,
+            "tests/lox_samples/test/variable/unreached_undefined.lox",
+            InterpretResult::CompileError
+        );
+
         // --- assignment ---
         lox_test!(
             assignment_global,

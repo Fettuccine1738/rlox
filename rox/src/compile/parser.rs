@@ -70,13 +70,13 @@ impl<'src> Parser<'src> {
             return;
         }
         self.panic_mode = true;
-        eprint!("[line {}] Error", token.line);
+        eprint!("[{}] Error", token.line);
         match token.kind {
             Kind::EOF => eprint!(" at the end"),
             Kind::Error => todo!(),
-            _ => eprint!("  at  {}", token.lexeme),
+            _ => eprint!(" at '{}'", token.lexeme),
         }
-        eprintln!(" : {}", message);
+        eprint!(": {}\n", message);
         self.had_error = true;
     }
 }

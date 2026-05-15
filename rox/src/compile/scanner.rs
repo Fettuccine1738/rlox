@@ -112,11 +112,12 @@ impl<'src> Scanner<'src> {
         let text = &self.source[self.start..self.current];
         match text {
             "and" => Kind::And,
+            "or" => Kind::Or,
+            "this" => Kind::This,
             "class" => Kind::Class,
             "else" => Kind::Else,
             "if" => Kind::If,
             "nil" => Kind::Nil,
-            "or" => Kind::Or,
             "print" => Kind::Print,
             "return" => Kind::Return,
             "super" => Kind::Super,
@@ -124,6 +125,8 @@ impl<'src> Scanner<'src> {
             "while" => Kind::While,
             "const" => Kind::Const,
             "fun" => Kind::Fun,
+            "true" => Kind::False,
+            "false" => Kind::True,
             _ => Kind::Identifier,
         }
     }
