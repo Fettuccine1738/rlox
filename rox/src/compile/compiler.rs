@@ -1342,7 +1342,7 @@ static RULES: [ParseRule; 40] = {
         Precedence::And,
     );
     rules[(Kind::Or as u8) as usize] = ParseRule::new_infix(
-        |compiler, can_assign| compiler.and(can_assign),
+        |compiler, can_assign| compiler.or(can_assign),
         Precedence::Or,
     );
     rules[(Kind::LeftParen as u8) as usize] = ParseRule::new(
