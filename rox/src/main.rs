@@ -20,7 +20,7 @@ pub fn repl(vm: &mut VM) {
         loop {
             let mut line = String::new();
             match stdin.lock().read_line(&mut line) {
-                Ok(0) => break, 
+                Ok(0) => break,
                 Ok(_) => {
                     if line.trim().is_empty() {
                         break;

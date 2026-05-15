@@ -25,6 +25,28 @@ pub mod test {
         }};
     }
 
+
+    macro_rules! assert_file_interprets_ok {
+    ($path:expr) => {{
+        let src = std::fs::read_to_string($path)
+            .unwrap_or_else(|e| panic!("Failed to read test file '{}': {}", $path, e));
+        let mut vm = VM::init();
+        assert_eq!(vm.interpret(src), InterpretResult::Ok);
+    }};
+}
+
+macro_rules! assert_file_interpreter_expects {
+    ($path:expr, $expected:expr) => {{
+        let src = std::fs::read_to_string($path)
+            .unwrap_or_else(|e| panic!("Failed to read test file '{}': {}", $path, e));
+        let mut vm = VM::init();
+        assert_eq!(vm.interpret(src), $expected);
+    }};
+}
+
+
+    pub mod my_suite {
+        use super::*;
     #[test]
     pub(super) fn tests_arithmetic_expr() {
         // TODO: this also tests that a single '5' is stored in the constants pool.
@@ -428,4 +450,60 @@ pub mod test {
             "
         )
     }
+    }
+
+
+    pub mod lox_suite {
+    use super::*;
+
+    macro_rules! lox_test {
+        ($name:ident, $path:expr) => {
+            #[test]
+            fn $name() {
+                assert_file_interprets_ok!($path);
+            }
+        };
+        // variant for tests expected to fail
+        ($name:ident, $path:expr, $expected:expr) => {
+            #[test]
+            fn $name() {
+                assert_file_interpreter_expects!($path, $expected);
+            }
+        };
+    }
+
+    // variables 
+    lox_test!(collide_with_params,           "tests/lox_samples/assignment/global.lox");
+    // --- assignment ---
+    lox_test!(assignment_global,           "tests/lox_samples/assignment/global.lox");
+    lox_test!(assignment_local,            "tests/lox_samples/assignment/local.lox");
+    lox_test!(assignment_undefined,        "tests/lox_samples/assignment/undefined.lox",  InterpretResult::RuntimeError);
+
+    // --- block ---
+    lox_test!(block_empty,                 "tests/lox_samples/block/empty.lox");
+    lox_test!(block_scope,                 "tests/lox_samples/block/scope.lox");
+
+    // --- call ---
+    lox_test!(call_bool,                   "tests/lox_samples/call/bool.lox",             InterpretResult::RuntimeError);
+    lox_test!(call_nil,                    "tests/lox_samples/call/nil.lox",              InterpretResult::RuntimeError);
+
+    // --- closure ---
+    lox_test!(closure_open_upvalue,        "tests/lox_samples/closure/open_upvalue.lox");
+
+    // --- if ---
+    lox_test!(if_dangling_else,            "tests/lox_samples/if/dangling_else.lox");
+    lox_test!(if_else,                     "tests/lox_samples/if/else.lox");
+
+    // --- logical_operator ---
+    lox_test!(logical_and,                 "tests/lox_samples/logical_operator/and.lox");
+    lox_test!(logical_or,                  "tests/lox_samples/logical_operator/or.lox");
+
+    // --- while ---
+    lox_test!(while_syntax,                "tests/lox_samples/while/syntax.lox");
+
+    // --- function ---
+    lox_test!(function_recursion,          "tests/lox_samples/function/recursion.lox");
+    lox_test!(function_mutual_recursion,   "tests/lox_samples/function/mutual_recursion.lox");
+}
+
 }

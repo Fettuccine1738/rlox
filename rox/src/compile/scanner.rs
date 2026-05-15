@@ -37,8 +37,10 @@ impl<'src> Scanner<'src> {
         if Self::is_alpha(ch) {
             return Some(self.identifier());
         }
-        
-        if ch == '/' && let Some('/') = self.peek() {
+
+        if ch == '/'
+            && let Some('/') = self.peek()
+        {
             self.skip_comment();
         }
 
@@ -168,7 +170,7 @@ impl<'src> Scanner<'src> {
                 Some('\n') => {
                     self.line += 1;
                     break;
-                },
+                }
                 Some(_) => {
                     self.advance();
                 }
