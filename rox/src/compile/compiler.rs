@@ -507,7 +507,8 @@ impl<'src> Compiler<'src> {
             is_captured: false,
         });
 
-        // consume parameters
+        // begin scope, so parameters are registered as local values.
+        inner.begin_scope();
         if !inner.check(Kind::RightParen) {
             loop {
                 if (inner.function.arity as u32 + 1) > FUNCTION_ARG_MAX {
@@ -527,7 +528,6 @@ impl<'src> Compiler<'src> {
         }
 
         inner.consume(Kind::RightParen, "Expect ')' after parameters.");
-        inner.begin_scope();
         inner.consume(Kind::LeftBrace, "Expect '{' before function body.");
         inner.block();
         // inner.end_scope(); unclear why we do not need to end scope
@@ -537,7 +537,16 @@ impl<'src> Compiler<'src> {
         let bytes_to_emit: Vec<(u8, u32)> = inner
             .upvalues
             .iter()
-            .map(|u| (if u.is_local { 1 } else { 0 }, u.index))
+            .map(|u| {
+                (
+                    if u.is_local {
+                        LONG_ARG_INDEX
+                    } else {
+                        SHORT_ARG_INDEX
+                    },
+                    u.index,
+                )
+            })
             .collect();
         let function: Rc<Function> = inner.end_compilation();
         let _inner: Compiler = mem::replace(self, *inner.enclosing.unwrap());
@@ -1165,11 +1174,12 @@ impl<'src> Compiler<'src> {
             if local.depth != -1 && local.depth < self.scope_depth {
                 break;
             }
-
+            let msg = format!(
+                "Error at '{}' : Already a variable with this name in scope",
+                name.lexeme
+            );
             if name.lexeme == local.name.lexeme {
-                self.parser
-                    .borrow_mut()
-                    .error("Variable with this name exists in this scope.");
+                self.parser.borrow_mut().error(&msg);
             }
         }
         self.add_local(name, is_const);

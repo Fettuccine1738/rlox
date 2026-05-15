@@ -527,10 +527,7 @@ pub mod test {
             logical_and,
             "tests/lox_samples/test/logical_operator/and.lox"
         );
-        lox_test!(
-            logical_or,
-            "tests/lox_samples/test/logical_operator/or.lox"
-        );
+        lox_test!(logical_or, "tests/lox_samples/test/logical_operator/or.lox");
 
         // --- while ---
         lox_test!(while_syntax, "tests/lox_samples/test/while/syntax.lox");
