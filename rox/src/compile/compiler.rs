@@ -235,7 +235,7 @@ impl<'src> Compiler<'src> {
 
     fn end_compilation(&mut self) -> Rc<Function> {
         self.emit_return();
-        #[cfg(feature = "")] // #[cfg(feature="")] // custom features
+        #[cfg(feature  = "trace_execution")] // #[cfg(feature="")] // custom features
         // #[cfg(any(test, feature=""))] // analogous to a #ifdef block in C
         let name = self
             .function
@@ -243,15 +243,15 @@ impl<'src> Compiler<'src> {
             .as_deref()
             .unwrap_or("Script")
             .to_string();
-        #[cfg(feature = "")]
+        #[cfg(feature  = "trace_execution")]
         let status = if self.parser.borrow().had_error {
             "Failed to Compile"
         } else {
             "Compile successful"
         };
-        #[cfg(feature = "")]
+        #[cfg(feature  = "trace_execution")]
         let display_string = format!("{}  :  {}", name, status);
-        #[cfg(feature = "")]
+        #[cfg(feature  = "trace_execution")]
         Chunk::disassemble(self.current_chunk(), &display_string);
 
         self.function.free_unused_mem();
