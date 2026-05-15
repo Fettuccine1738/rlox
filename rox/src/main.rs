@@ -70,6 +70,6 @@ fn main() {
     } else if args.len() == 1 {
         run_file(&args[0], &mut vm);
     } else {
-        eprintln!("ROX does not expect more than one argument.");
+        eprintln!("Rox does not expect more than one argument.");
     }
 }

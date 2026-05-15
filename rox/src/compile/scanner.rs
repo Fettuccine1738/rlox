@@ -114,7 +114,7 @@ impl<'src> Scanner<'src> {
             "else" => Kind::Else,
             "if" => Kind::If,
             "nil" => Kind::Nil,
-            "Or" => Kind::Or,
+            "or" => Kind::Or,
             "print" => Kind::Print,
             "return" => Kind::Return,
             "super" => Kind::Super,
